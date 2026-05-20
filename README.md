@@ -62,10 +62,26 @@ decides how that structure manifests in each output format.
 | [`stem-render`](crates/stem-render) | Renderer trait + HTML (full) + docx/pdf (stubbed contracts) |
 | [`stem-lsp`](crates/stem-lsp) | `tower-lsp` server: diagnostics, completion, hover, symbols, semantic tokens |
 | [`stem-cli`](crates/stem-cli) | `stem` binary — `parse` / `check` / `render` / `registry` |
+| [`stem-wasm`](crates/stem-wasm) | `wasm-bindgen` bindings powering the live web playground in `web/` |
 
 Detailed design lives in [`docs/grammar.md`](docs/grammar.md) (formal
 EBNF + content disambiguation rules) and
 [`docs/architecture.md`](docs/architecture.md).
+
+## Playground (live web preview)
+
+A WASM build of the parser + validator + HTML renderer drives a
+live-preview playground:
+
+```sh
+./scripts/serve-playground.sh
+# → http://localhost:8080
+```
+
+First run auto-installs the wasm32 target and `wasm-pack`. After that
+it's fast. Source on the left, sandboxed iframe preview on the right,
+diagnostics underneath — all updates on keystroke (50ms debounce).
+Source is auto-persisted to `localStorage`.
 
 ## CLI usage
 

@@ -7,6 +7,7 @@ members = [
     "crates/stem-lsp",
     "crates/stem-render",
     "crates/stem-cli",
+    "crates/stem-wasm",
 ]
 
 [workspace.package]

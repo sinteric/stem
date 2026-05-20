@@ -5,3 +5,6 @@ Cargo.lock.bak
 *.swp
 .idea/
 .vscode/
+
+# Generated WASM bindings (built by scripts/serve-playground.sh)
+/web/pkg/

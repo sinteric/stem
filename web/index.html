@@ -1,0 +1,38 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>Stem playground</title>
+  <link rel="stylesheet" href="./styles.css">
+</head>
+<body>
+  <header>
+    <strong>Stem</strong>
+    <span class="muted">live playground</span>
+    <span id="stats" class="stats"></span>
+    <span class="spacer"></span>
+    <button id="reset" type="button" title="Reset to the default example">reset</button>
+    <button id="copy" type="button" title="Copy the rendered HTML">copy HTML</button>
+  </header>
+
+  <main>
+    <section class="pane editor-pane">
+      <div class="pane-label">source</div>
+      <textarea id="src" spellcheck="false" autocomplete="off" autocorrect="off"
+                autocapitalize="off" wrap="off"></textarea>
+    </section>
+    <section class="pane preview-pane">
+      <div class="pane-label">preview</div>
+      <iframe id="preview" sandbox=""></iframe>
+    </section>
+  </main>
+
+  <footer>
+    <div class="footer-label">diagnostics</div>
+    <ul id="diags"></ul>
+  </footer>
+
+  <script type="module" src="./index.js"></script>
+</body>
+</html>
