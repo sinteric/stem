@@ -1,0 +1,18 @@
+[package]
+name = "stem-cli"
+version.workspace = true
+edition.workspace = true
+license.workspace = true
+description = "Command-line tool for the Stem markup language"
+
+[[bin]]
+name = "stem"
+path = "src/main.rs"
+
+[dependencies]
+stem-core = { workspace = true }
+stem-parser = { workspace = true }
+stem-types = { workspace = true }
+stem-render = { workspace = true }
+clap = { workspace = true }
+anyhow = { workspace = true }

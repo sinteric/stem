@@ -1,0 +1,38 @@
+[workspace]
+resolver = "2"
+members = [
+    "crates/stem-core",
+    "crates/stem-parser",
+    "crates/stem-types",
+    "crates/stem-lsp",
+    "crates/stem-render",
+    "crates/stem-cli",
+]
+
+[workspace.package]
+version = "0.1.0"
+edition = "2021"
+license = "MIT OR Apache-2.0"
+repository = "https://github.com/sinteric/stem"
+rust-version = "1.75"
+
+[workspace.dependencies]
+stem-core = { path = "crates/stem-core" }
+stem-parser = { path = "crates/stem-parser" }
+stem-types = { path = "crates/stem-types" }
+stem-render = { path = "crates/stem-render" }
+
+serde = { version = "1", features = ["derive"] }
+serde_json = "1"
+thiserror = "1"
+anyhow = "1"
+
+tokio = { version = "1", features = ["macros", "rt-multi-thread", "io-std"] }
+tower-lsp = "0.20"
+dashmap = "5"
+
+clap = { version = "4", features = ["derive"] }
+
+[profile.release]
+lto = "thin"
+codegen-units = 1

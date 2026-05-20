@@ -1,0 +1,20 @@
+[package]
+name = "stem-lsp"
+version.workspace = true
+edition.workspace = true
+license.workspace = true
+description = "Language Server Protocol implementation for Stem"
+
+[[bin]]
+name = "stem-lsp"
+path = "src/main.rs"
+
+[dependencies]
+stem-core = { workspace = true }
+stem-parser = { workspace = true }
+stem-types = { workspace = true }
+tokio = { workspace = true }
+tower-lsp = { workspace = true }
+dashmap = { workspace = true }
+serde_json = { workspace = true }
+anyhow = { workspace = true }

@@ -1,0 +1,50 @@
+[type:document, encoding:utf-8, locale:ko-KR, theme:corporate, title:"2026 Roadmap"]
+
+section(cover)(
+  # 2026 Product Roadmap
+  ## Strategy Team
+  date(2026.05.20)
+)
+
+section(toc)
+
+section(body)(
+  ## Background
+
+  Existing document ecosystems are text(falling behind)[color:primary]
+  in the AI era. footnote(Gartner 2025 Report)
+
+  layout(two-column)(
+    col(
+      ### Problems
+      - Format fragmentation
+      - Hard to generate with AI
+      - Manual conversion work
+    )
+    col(
+      ### Opportunities
+      - Single source format
+      - AI-native design
+      - Auto conversion
+    )
+  )
+
+  table[border:outer](
+    row(header)(
+      cell(Phase)
+      cell(Content)
+      cell(Timeline)[span:2]
+    )
+    row(
+      cell(Phase 1)
+      cell(Spec finalization)
+      cell(2026 Q2)
+      cell(In Progress)[bg:yellow]
+    )
+  )
+)
+
+section(closing)(
+  # Thank you
+  note(Contact: contact@example.com)
+)

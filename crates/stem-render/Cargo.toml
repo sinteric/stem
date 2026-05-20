@@ -1,0 +1,11 @@
+[package]
+name = "stem-render"
+version.workspace = true
+edition.workspace = true
+license.workspace = true
+description = "Render Stem documents to output formats (HTML, docx, pdf)"
+
+[dependencies]
+stem-core = { workspace = true }
+stem-parser = { workspace = true }
+thiserror = { workspace = true }
