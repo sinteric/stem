@@ -196,6 +196,16 @@ fn sheet_with_no_cells_shows_empty_message() {
 }
 
 #[test]
+fn link_renders_via_per_element_dispatch() {
+    let html = render(r#"p(See @link[to:"https://example.com", title:"Example"](here) for more.)"#);
+    assert!(
+        html.contains(r#"<a href="https://example.com" title="Example">here</a>"#),
+        "unexpected link output: {}",
+        html
+    );
+}
+
+#[test]
 fn full_document_renders_doctype_and_locale() {
     let r = parse(r#"[type:document, locale:ko-KR, title:"제목"]
 section{ h1(Hello) p(World.) }"#);

@@ -1,8 +1,11 @@
 //! HTML renderer.
 //!
-//! Walks a `stem_core::ast::Document` and produces HTML. Doesn't
-//! consult any registry — renders by element name, with a generic
-//! fallback for unknown blocks ().
+//! Walks a `stem_core::ast::Document` and produces HTML. Per-element
+//! render functions live in the [`elements`] submodule; this file owns
+//! the document walker, sheet rendering, and a fallback match arm for
+//! elements not yet migrated to the per-element layout.
+
+pub mod elements;
 
 use std::fmt::Write;
 
@@ -736,6 +739,12 @@ fn render_text_body_inline(out: &mut String, b: &Block) -> Result<(), std::fmt::
 }
 
 fn render_inline(out: &mut String, b: &Block) -> Result<(), std::fmt::Error> {
+    // Per-element dispatch: consult the migrated per-element render
+    // table first. Falls through to the legacy match arms for elements
+    // not yet moved.
+    if let Some(el) = elements::lookup_inline(&b.name) {
+        return (el.render)(out, b);
+    }
     match b.name.as_str() {
         "text" => {
             let mut style = String::new();
@@ -796,18 +805,6 @@ fn render_inline(out: &mut String, b: &Block) -> Result<(), std::fmt::Error> {
             }
             write!(out, "<code>{}</code>", html_text(&text))?;
         }
-        "link" => {
-            let to = b.prop_str("to").unwrap_or("#");
-            write!(out, "<a href=\"{}\"", html_attr(to))?;
-            if let Some(t) = b.prop_str("title") {
-                write!(out, " title=\"{}\"", html_attr(t))?;
-            }
-            write!(out, ">")?;
-            for s in b.body_text_pieces() {
-                write!(out, "{}", html_text(&s))?;
-            }
-            write!(out, "</a>")?;
-        }
         "date" => {
             let mut text = String::new();
             for s in b.body_text_pieces() {
@@ -850,7 +847,7 @@ fn render_inline(out: &mut String, b: &Block) -> Result<(), std::fmt::Error> {
     Ok(())
 }
 
-trait BodyTextPieces {
+pub(crate) trait BodyTextPieces {
     fn body_text_pieces(&self) -> Vec<String>;
 }
 
@@ -907,7 +904,7 @@ fn base_css(theme: &Theme) -> String {
     )
 }
 
-fn html_text(s: &str) -> String {
+pub(crate) fn html_text(s: &str) -> String {
     let mut out = String::with_capacity(s.len());
     for ch in s.chars() {
         match ch {
@@ -920,7 +917,7 @@ fn html_text(s: &str) -> String {
     out
 }
 
-fn html_attr(s: &str) -> String {
+pub(crate) fn html_attr(s: &str) -> String {
     let mut out = String::with_capacity(s.len());
     for ch in s.chars() {
         match ch {

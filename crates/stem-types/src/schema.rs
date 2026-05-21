@@ -139,8 +139,14 @@ impl Registry {
 
 pub fn default_registry() -> Registry {
     let mut r = Registry::new();
+    // Legacy single-array source. Each element will migrate to
+    // `crate::elements` over successive commits and disappear from here.
     for s in BUILTINS.iter().cloned() {
         r.insert(s);
+    }
+    // New per-element source. Migrated elements live here.
+    for def in crate::elements::ALL {
+        r.insert(def.schema.clone());
     }
     r
 }
@@ -234,19 +240,7 @@ const CODE_EL: ElementSchema = ElementSchema {
     doc: "Inline or block monospace code",
 };
 
-const LINK: ElementSchema = ElementSchema {
-    name: "link",
-    categories: &[Inline],
-    doc_types: ALL,
-    bodies: &[Text],
-    parents: &["any-text-body"],
-    children: &[],
-    properties: &[
-        PropertyDef { name: "to", kind: ValueKind::String, required: true, doc: "Target URL or cross-ref" },
-        PropertyDef { name: "title", kind: ValueKind::String, required: false, doc: "Tooltip text" },
-    ],
-    doc: "Hyperlink",
-};
+// LINK migrated to `crate::elements::link`.
 
 const DATE: ElementSchema = ElementSchema {
     name: "date",
@@ -296,16 +290,7 @@ const MATH: ElementSchema = ElementSchema {
     doc: "Inline or block math expression",
 };
 
-const FORMULA: ElementSchema = ElementSchema {
-    name: "formula",
-    categories: &[Inline, BlockLeaf],
-    doc_types: ALL,
-    bodies: &[Text],
-    parents: &["any-text-body", "any-block-container"],
-    children: &[],
-    properties: &[],
-    doc: "Spreadsheet formula expression. The body is the formula text (no leading `=`). Inside a `cell` body it becomes the cell's computed value; in prose, it evaluates with an empty cell env.",
-};
+// FORMULA migrated to `crate::elements::formula`.
 
 // --- Document structural ---
 
@@ -867,7 +852,7 @@ const CHART: ElementSchema = ElementSchema {
 // matching variant.
 const BUILTINS: &[ElementSchema] = &[
     // Universal inline
-    TEXT, FOOTNOTE, CODE_EL, LINK, DATE, MENTION, MATH, FORMULA,
+    TEXT, FOOTNOTE, CODE_EL, DATE, MENTION, MATH,
     // Document structural
     SECTION, LAYOUT, COL_LAYOUT, PAGEBREAK, HR,
     // Headings
