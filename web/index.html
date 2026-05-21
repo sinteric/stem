@@ -10,6 +10,15 @@
   <header>
     <strong>Stem</strong>
     <span class="muted">live playground</span>
+
+    <label class="grammar-toggle" title="Switch between grammar v1 (legacy) and v2 (current spec)">
+      <span class="muted">grammar:</span>
+      <select id="grammar">
+        <option value="v2">v2 (current)</option>
+        <option value="v1">v1 (legacy)</option>
+      </select>
+    </label>
+
     <span id="stats" class="stats"></span>
     <span class="spacer"></span>
     <button id="reset" type="button" title="Reset to the default example">reset</button>

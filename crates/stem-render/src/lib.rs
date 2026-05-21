@@ -10,10 +10,12 @@ use stem_core::ast::{Document, FunctionCall};
 use stem_core::theme::Theme;
 
 pub mod html;
+pub mod html_v2;
 pub mod docx;
 pub mod pdf;
 
 pub use html::HtmlRenderer;
+pub use html_v2::HtmlV2Renderer;
 pub use docx::DocxRenderer;
 pub use pdf::PdfRenderer;
 

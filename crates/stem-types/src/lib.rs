@@ -13,12 +13,17 @@ use stem_core::diagnostic::Diagnostic;
 use stem_core::span::Span;
 
 pub mod schema;
+pub mod schema_v2;
 pub mod validator;
+pub mod validator_v2;
 
 pub use schema::{
     ArgArity, DocumentType, FunctionSchema, PropertySchema, Registry, ValueKind,
 };
 pub use validator::validate;
+
+pub use schema_v2::{default_registry as default_registry_v2, Registry as RegistryV2};
+pub use validator_v2::validate as validate_v2;
 
 /// Convenience: build the registry of the bundled document types
 /// (`document`, `presentation`, `sheet`).

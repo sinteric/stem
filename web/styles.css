@@ -57,6 +57,23 @@ button {
 }
 button:hover { background: #232a35; }
 
+.grammar-toggle {
+  display: inline-flex;
+  align-items: center;
+  gap: 0.4rem;
+  font-size: 12px;
+}
+.grammar-toggle select {
+  background: var(--panel-2);
+  color: var(--text);
+  border: 1px solid var(--rule);
+  border-radius: 4px;
+  padding: 0.2rem 0.4rem;
+  font-family: var(--ui);
+  font-size: 12px;
+  cursor: pointer;
+}
+
 main {
   display: grid;
   grid-template-columns: 1fr 1fr;
