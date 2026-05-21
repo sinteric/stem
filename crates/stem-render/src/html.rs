@@ -83,581 +83,21 @@ impl Renderer for HtmlRenderer {
     }
 }
 
-fn render_block(out: &mut String, b: &Block, theme: &Theme) -> Result<(), std::fmt::Error> {
-    match b.name.as_str() {
-        "section" => render_section(out, b, theme),
-        "layout" => render_layout(out, b, theme),
-        "col" => render_col(out, b, theme),
-        "pagebreak" => writeln!(
-            out,
-            "<div class=\"stem-pagebreak\" style=\"page-break-after:always;\"></div>"
-        ),
-        "hr" => writeln!(out, "<hr>"),
-        "h1" => render_heading(out, b, 1),
-        "h2" => render_heading(out, b, 2),
-        "h3" => render_heading(out, b, 3),
-        "h4" => render_heading(out, b, 4),
-        "h5" => render_heading(out, b, 5),
-        "h6" => render_heading(out, b, 6),
-        "p" => render_paragraph(out, b, theme),
-        "note" => render_note(out, b, theme),
-        "blockquote" => render_blockquote(out, b, theme),
-        "image" => render_image(out, b),
-        "ol" => render_list(out, b, theme, true),
-        "ul" => render_list(out, b, theme, false),
-        "li" => render_list_item(out, b, theme),
-        "table" => render_table(out, b, theme),
-        "row" => render_row(out, b, theme, false),
-        "cell" => render_cell(out, b, theme, false),
-        "date" => render_date_block(out, b),
-        "code" => render_code_block(out, b),
-        "slide" => render_slide(out, b, theme),
-        "title" => render_slide_title(out, b, theme),
-        "bullets" => render_list(out, b, theme, false), // bullets render like ul
-        "item" => render_list_item(out, b, theme),
-        "speaker-note" => render_speaker_note(out, b),
-        "sheet" => render_sheet(out, b, theme),
-        _ => render_fallback_block(out, b, theme),
+pub(crate) fn render_block(out: &mut String, b: &Block, theme: &Theme) -> Result<(), std::fmt::Error> {
+    // Per-element dispatch: each block element owns its own render fn
+    // in `elements::<name>`. Elements not in the table fall through to
+    // the generic block wrapper.
+    if let Some(el) = elements::lookup_block(&b.name) {
+        return (el.render)(out, b, theme);
     }
+    render_fallback_block(out, b, theme)
 }
 
-fn render_section(out: &mut String, b: &Block, theme: &Theme) -> Result<(), std::fmt::Error> {
-    let id = b.prop_str("id");
-    match id {
-        Some(id) => writeln!(out, "<section data-id=\"{}\">", html_attr(id))?,
-        None => writeln!(out, "<section>")?,
-    }
-    if id == Some("toc") && b.body.is_none() {
-        writeln!(
-            out,
-            "<nav class=\"stem-toc\" aria-label=\"Table of contents\"><!-- generated --></nav>"
-        )?;
-    } else {
-        render_children_of(out, b, theme)?;
-    }
-    writeln!(out, "</section>")?;
-    Ok(())
-}
-
-fn render_layout(out: &mut String, b: &Block, theme: &Theme) -> Result<(), std::fmt::Error> {
-    let kind = b.prop_str("kind").unwrap_or("two-column");
-    writeln!(
-        out,
-        "<div class=\"stem-layout\" data-layout=\"{}\" style=\"display:grid;gap:1rem;{}\">",
-        html_attr(kind),
-        grid_template_for(kind),
-    )?;
-    render_children_of(out, b, theme)?;
-    writeln!(out, "</div>")?;
-    Ok(())
-}
-
-fn render_col(out: &mut String, b: &Block, theme: &Theme) -> Result<(), std::fmt::Error> {
-    writeln!(out, "<div class=\"stem-col\">")?;
-    render_children_of(out, b, theme)?;
-    writeln!(out, "</div>")?;
-    Ok(())
-}
-
-fn render_heading(out: &mut String, b: &Block, level: u8) -> Result<(), std::fmt::Error> {
-    write!(out, "<h{}", level)?;
-    if let Some(id) = b.prop_str("id") {
-        write!(out, " id=\"{}\"", html_attr(id))?;
-    }
-    write!(out, ">")?;
-    render_text_body_inline(out, b)?;
-    writeln!(out, "</h{}>", level)?;
-    Ok(())
-}
-
-fn render_paragraph(out: &mut String, b: &Block, _theme: &Theme) -> Result<(), std::fmt::Error> {
-    write!(out, "<p")?;
-    if let Some(a) = b.prop_str("align") {
-        write!(out, " style=\"text-align:{};\"", html_attr(a))?;
-    }
-    write!(out, ">")?;
-    render_text_body_inline(out, b)?;
-    writeln!(out, "</p>")?;
-    Ok(())
-}
-
-fn render_note(out: &mut String, b: &Block, theme: &Theme) -> Result<(), std::fmt::Error> {
-    let bg = theme
-        .resolve_color("gray")
-        .map(|c| c.to_hex())
-        .unwrap_or_else(|| "#f6f8fa".into());
-    let kind = b.prop_str("kind").unwrap_or("info");
-    writeln!(
-        out,
-        "<aside class=\"stem-note stem-note-{}\" style=\"display:block;padding:0.5rem 0.75rem;\
-         background:{};border-left:3px solid #8b949e;margin:1rem 0;\">",
-        html_attr(kind),
-        bg
-    )?;
-    render_text_body_inline(out, b)?;
-    writeln!(out, "</aside>")?;
-    Ok(())
-}
-
-fn render_blockquote(
-    out: &mut String,
-    b: &Block,
-    _theme: &Theme,
-) -> Result<(), std::fmt::Error> {
-    write!(out, "<blockquote")?;
-    if let Some(c) = b.prop_str("cite") {
-        write!(out, " cite=\"{}\"", html_attr(c))?;
-    }
-    write!(out, ">")?;
-    render_text_body_inline(out, b)?;
-    writeln!(out, "</blockquote>")?;
-    Ok(())
-}
-
-fn render_image(out: &mut String, b: &Block) -> Result<(), std::fmt::Error> {
-    let src = b.prop_str("src").unwrap_or("");
-    let alt = b.prop_str("alt").unwrap_or("");
-    write!(
-        out,
-        "<figure><img src=\"{}\" alt=\"{}\"",
-        html_attr(src),
-        html_attr(alt)
-    )?;
-    if let Some(w) = b.prop_str("w") {
-        write!(out, " style=\"width:{};\"", html_attr(w))?;
-    }
-    writeln!(out, ">")?;
-    if let Some(c) = b.prop_str("caption") {
-        writeln!(out, "<figcaption>{}</figcaption>", html_text(c))?;
-    }
-    writeln!(out, "</figure>")?;
-    Ok(())
-}
-
-fn render_list(
-    out: &mut String,
-    b: &Block,
-    theme: &Theme,
-    ordered: bool,
-) -> Result<(), std::fmt::Error> {
-    let tag = if ordered { "ol" } else { "ul" };
-    write!(out, "<{}", tag)?;
-    if let Some(start) = b.prop_str("start") {
-        write!(out, " start=\"{}\"", html_attr(start))?;
-    }
-    if let Some(style) = b.prop_str("style") {
-        // Render style as a data attr; CSS list-style-type mapping is renderer-specific.
-        write!(out, " data-style=\"{}\"", html_attr(style))?;
-    }
-    writeln!(out, ">")?;
-    render_children_of(out, b, theme)?;
-    writeln!(out, "</{}>", tag)?;
-    Ok(())
-}
-
-fn render_list_item(out: &mut String, b: &Block, theme: &Theme) -> Result<(), std::fmt::Error> {
-    write!(out, "<li")?;
-    if let Some(at) = b.prop_str("at") {
-        write!(out, " value=\"{}\"", html_attr(at))?;
-    }
-    write!(out, ">")?;
-    match &b.body {
-        Body::Text(_) => render_text_body_inline(out, b)?,
-        Body::Children(_) => render_children_of(out, b, theme)?,
-        Body::None => {}
-    }
-    writeln!(out, "</li>")?;
-    Ok(())
-}
-
-fn render_table(out: &mut String, b: &Block, theme: &Theme) -> Result<(), std::fmt::Error> {
-    let border = b.prop_str("border").unwrap_or("none");
-    let style = match border {
-        "outer" | "all" => "border:1px solid currentColor;border-collapse:collapse;",
-        _ => "border-collapse:collapse;",
-    };
-    writeln!(out, "<table data-border=\"{}\" style=\"{}\">", border, style)?;
-    if let Some(c) = b.prop_str("caption") {
-        writeln!(out, "<caption>{}</caption>", html_text(c))?;
-    }
-    if let Body::Children(children) = &b.body {
-        for child in children {
-            if child.name == "row" {
-                let is_header = child.prop_str("kind") == Some("header");
-                render_row(out, child, theme, is_header)?;
-            }
-        }
-    }
-    writeln!(out, "</table>")?;
-    Ok(())
-}
-
-fn render_row(
-    out: &mut String,
-    b: &Block,
-    theme: &Theme,
-    is_header: bool,
-) -> Result<(), std::fmt::Error> {
-    writeln!(out, "<tr>")?;
-    if let Body::Children(children) = &b.body {
-        for child in children {
-            if child.name == "cell" {
-                render_cell(out, child, theme, is_header)?;
-            }
-        }
-    }
-    writeln!(out, "</tr>")?;
-    Ok(())
-}
-
-fn render_cell(
-    out: &mut String,
-    b: &Block,
-    theme: &Theme,
-    is_header: bool,
-) -> Result<(), std::fmt::Error> {
-    let tag = if is_header { "th" } else { "td" };
-    let mut style = String::from("padding:0.25rem 0.5rem;border:1px solid currentColor;");
-    let mut attrs = String::new();
-    for p in &b.properties {
-        match p.key.as_str() {
-            "colspan" => write!(attrs, " colspan=\"{}\"", html_attr(p.value.as_str())).unwrap(),
-            "rowspan" => write!(attrs, " rowspan=\"{}\"", html_attr(p.value.as_str())).unwrap(),
-            "align" => write!(style, "text-align:{};", html_attr(p.value.as_str())).unwrap(),
-            "valign" => write!(style, "vertical-align:{};", html_attr(p.value.as_str())).unwrap(),
-            "bg" => {
-                if let Some(c) = theme.resolve_color(p.value.as_str()) {
-                    write!(style, "background:{};", c.to_hex()).unwrap();
-                }
-            }
-            _ => {}
-        }
-    }
-    write!(out, "<{}{} style=\"{}\">", tag, attrs, style)?;
-    render_text_body_inline(out, b)?;
-    writeln!(out, "</{}>", tag)?;
-    Ok(())
-}
-
-fn render_date_block(out: &mut String, b: &Block) -> Result<(), std::fmt::Error> {
-    write!(out, "<time>")?;
-    render_text_body_inline(out, b)?;
-    writeln!(out, "</time>")?;
-    Ok(())
-}
-
-fn render_code_block(out: &mut String, b: &Block) -> Result<(), std::fmt::Error> {
-    let lang = b.prop_str("lang").unwrap_or("");
-    write!(
-        out,
-        "<pre><code class=\"language-{}\">",
-        html_attr(lang)
-    )?;
-    if let Body::Text(pieces) = &b.body {
-        for p in pieces {
-            if let TextPiece::Literal { text, .. } = p {
-                write!(out, "{}", html_text(text))?;
-            }
-        }
-    }
-    writeln!(out, "</code></pre>")?;
-    Ok(())
-}
-
-fn render_slide(out: &mut String, b: &Block, theme: &Theme) -> Result<(), std::fmt::Error> {
-    let mut style = String::from(
-        "page-break-after:always;min-height:5in;padding:1rem;border:1px dashed #aaa;\
-         margin-bottom:1rem;",
-    );
-    if let Some(bg) = b.prop_str("background") {
-        if let Some(c) = theme.resolve_color(bg) {
-            write!(style, "background:{};", c.to_hex()).unwrap();
-        }
-    }
-    let id = b.prop_str("id").unwrap_or("");
-    let layout = b.prop_str("layout").unwrap_or("");
-    writeln!(
-        out,
-        "<section class=\"stem-slide\" data-id=\"{}\" data-layout=\"{}\" style=\"{}\">",
-        html_attr(id),
-        html_attr(layout),
-        style,
-    )?;
-    render_children_of(out, b, theme)?;
-    writeln!(out, "</section>")?;
-    Ok(())
-}
-
-fn render_slide_title(
-    out: &mut String,
-    b: &Block,
-    _theme: &Theme,
-) -> Result<(), std::fmt::Error> {
-    write!(out, "<h1 class=\"stem-slide-title\">")?;
-    render_text_body_inline(out, b)?;
-    writeln!(out, "</h1>")?;
-    Ok(())
-}
-
-fn render_speaker_note(out: &mut String, b: &Block) -> Result<(), std::fmt::Error> {
-    write!(
-        out,
-        "<aside class=\"stem-speaker-note\" hidden style=\"display:none;\">"
-    )?;
-    if let Body::Text(pieces) = &b.body {
-        for p in pieces {
-            if let TextPiece::Literal { text, .. } = p {
-                write!(out, "{}", html_text(text))?;
-            }
-        }
-    }
-    writeln!(out, "</aside>")?;
-    Ok(())
-}
-
-fn render_sheet(out: &mut String, b: &Block, theme: &Theme) -> Result<(), std::fmt::Error> {
-    let name = b.prop_str("name").unwrap_or_else(|| b.prop_str("id").unwrap_or(""));
-    writeln!(
-        out,
-        "<section class=\"stem-sheet\" data-id=\"{}\">",
-        html_attr(b.prop_str("id").unwrap_or(""))
-    )?;
-    if !name.is_empty() {
-        writeln!(out, "<h3 class=\"stem-sheet-name\">{}</h3>", html_text(name))?;
-    }
-
-    // Index cells by (col_idx, row_idx) using the cooked address.
-    // After cook, every `cell[at:X]` should have its cascaded props
-    // already applied.
-    let mut by_pos: std::collections::HashMap<(u32, u32), &Block> = std::collections::HashMap::new();
-    let mut max_col: i64 = -1;
-    let mut max_row: i64 = -1;
-
-    // Build a source map for the formula evaluator. Cells whose body
-    // is a single `@formula(...)` inline element become CellSource::Formula
-    // — extracting the formula's body text. Everything else (plain text
-    // bodies, numbers) becomes CellSource::Literal.
-    let mut cell_sources: std::collections::HashMap<(u32, u32), crate::formula::CellSource> =
-        std::collections::HashMap::new();
-
-    if let Body::Children(kids) = &b.body {
-        for child in kids {
-            if child.name != "cell" {
-                continue;
-            }
-            let at = match child.prop_str("at") {
-                Some(s) => s,
-                None => continue,
-            };
-            if let Some((c, r)) = parse_cell_address(at) {
-                by_pos.insert((c, r), child);
-                if let Some(source) = extract_cell_source(child) {
-                    cell_sources.insert((c, r), source);
-                }
-                if (c as i64) > max_col {
-                    max_col = c as i64;
-                }
-                if (r as i64) > max_row {
-                    max_row = r as i64;
-                }
-            }
-        }
-    }
-
-    // Evaluate all formulas. The returned map has Num/Str/Error per cell.
-    let evaluated: std::collections::HashMap<(u32, u32), crate::formula::Value> =
-        crate::formula::evaluate_sheet(&cell_sources);
-
-    if max_col < 0 || max_row < 0 {
-        writeln!(
-            out,
-            "<p class=\"stem-sheet-empty\" style=\"color:#888;font-style:italic;\">(empty sheet)</p>"
-        )?;
-    } else {
-        let max_col = max_col as u32;
-        let max_row = max_row as u32;
-        writeln!(
-            out,
-            "<table class=\"stem-sheet-grid\" style=\"border-collapse:collapse;font-family:ui-monospace,monospace;\">"
-        )?;
-
-        // Column header row (A, B, C, ...).
-        writeln!(out, "<thead><tr>")?;
-        writeln!(
-            out,
-            "<th style=\"background:#f6f8fa;border:1px solid #d0d7de;padding:0.15rem 0.4rem;color:#888;\"></th>"
-        )?;
-        for c in 0..=max_col {
-            writeln!(
-                out,
-                "<th style=\"background:#f6f8fa;border:1px solid #d0d7de;padding:0.15rem 0.4rem;color:#888;\">{}</th>",
-                format_col_letter(c)
-            )?;
-        }
-        writeln!(out, "</tr></thead>")?;
-
-        writeln!(out, "<tbody>")?;
-        for r in 0..=max_row {
-            writeln!(out, "<tr>")?;
-            // Row header
-            writeln!(
-                out,
-                "<th style=\"background:#f6f8fa;border:1px solid #d0d7de;padding:0.15rem 0.4rem;color:#888;\">{}</th>",
-                r + 1
-            )?;
-            for c in 0..=max_col {
-                match by_pos.get(&(c, r)) {
-                    Some(cell) => {
-                        let value = evaluated.get(&(c, r));
-                        render_sheet_cell(out, cell, theme, value)?;
-                    }
-                    None => writeln!(
-                        out,
-                        "<td style=\"border:1px solid #d0d7de;padding:0.15rem 0.4rem;\"></td>"
-                    )?,
-                }
-            }
-            writeln!(out, "</tr>")?;
-        }
-        writeln!(out, "</tbody>")?;
-        writeln!(out, "</table>")?;
-    }
-
-    writeln!(out, "</section>")?;
-    Ok(())
-}
-
-fn render_sheet_cell(
-    out: &mut String,
-    cell: &Block,
-    theme: &Theme,
-    evaluated: Option<&crate::formula::Value>,
-) -> Result<(), std::fmt::Error> {
-    let mut style = String::from("border:1px solid #d0d7de;padding:0.15rem 0.4rem;");
-    for p in &cell.properties {
-        match p.key.as_str() {
-            "bg" => {
-                if let Some(c) = theme.resolve_color(p.value.as_str()) {
-                    write!(style, "background:{};", c.to_hex()).unwrap();
-                }
-            }
-            "weight" => match p.value.as_str() {
-                "light" => style.push_str("font-weight:300;"),
-                "regular" => style.push_str("font-weight:400;"),
-                "bold" => style.push_str("font-weight:700;"),
-                _ => {}
-            },
-            "align" => write!(style, "text-align:{};", html_attr(p.value.as_str())).unwrap(),
-            "valign" => write!(style, "vertical-align:{};", html_attr(p.value.as_str())).unwrap(),
-            _ => {}
-        }
-    }
-    let fmt = cell.prop_str("fmt");
-    let raw_body = cell.plain_text().unwrap_or_default();
-
-    // Detect "this cell is a formula cell" by looking for the @formula
-    // inline element in its body. Mirrors extract_cell_source.
-    let formula_inline = if let Body::Text(pieces) = &cell.body {
-        pieces.iter().find_map(|p| match p {
-            TextPiece::Inline(b) if b.name == "formula" => Some(b),
-            _ => None,
-        })
-    } else {
-        None
-    };
-    let is_formula = formula_inline.is_some();
-
-    // Display: evaluated value formatted per fmt if available, otherwise raw body.
-    let display = if let Some(value) = evaluated {
-        if is_formula || matches!(value, crate::formula::Value::Num(_)) {
-            crate::formula::format_value(value, fmt)
-        } else {
-            raw_body.clone()
-        }
-    } else {
-        raw_body.clone()
-    };
-
-    // Title attr shows the original formula text on hover.
-    let title = match formula_inline {
-        Some(b) => format!(
-            " title=\"@formula({})\"",
-            html_attr(&b.plain_text().unwrap_or_default())
-        ),
-        None => String::new(),
-    };
-
-    write!(
-        out,
-        "<td style=\"{}\" data-fmt=\"{}\"{}>",
-        style,
-        html_attr(fmt.unwrap_or("")),
-        title
-    )?;
-    if is_formula {
-        write!(out, "<span class=\"stem-formula-value\">{}</span>", html_text(&display))?;
-    } else {
-        write!(out, "{}", html_text(&display))?;
-    }
-    writeln!(out, "</td>")?;
-    Ok(())
-}
-
-/// Inspect a `cell[at:X](body)` and decide whether its body is a
-/// formula or a literal. Returns the corresponding `CellSource`, or
-/// `None` if the cell has no body at all.
-///
-/// A formula cell has a body of exactly one `@formula(...)` inline
-/// element (with optional surrounding whitespace). Mixed bodies (text
-/// + `@formula` + text) are treated as literals — the inline `@formula`
-/// still renders via the normal inline path when displaying the cell.
-fn extract_cell_source(cell: &Block) -> Option<crate::formula::CellSource> {
-    let pieces = match &cell.body {
-        Body::Text(p) => p,
-        _ => return None,
-    };
-    // Walk pieces, skip whitespace-only literals, find one inline @formula.
-    let mut found: Option<&Block> = None;
-    let mut had_other = false;
-    for p in pieces {
-        match p {
-            TextPiece::Literal { text, .. } => {
-                if !text.trim().is_empty() {
-                    had_other = true;
-                }
-            }
-            TextPiece::Inline(b) if b.name == "formula" => {
-                if found.is_some() {
-                    had_other = true; // multiple formulas — treat as literal
-                }
-                found = Some(b);
-            }
-            TextPiece::Inline(_) => {
-                had_other = true;
-            }
-        }
-    }
-    if let (Some(inline), false) = (found, had_other) {
-        let text = inline.plain_text().unwrap_or_default();
-        return Some(crate::formula::CellSource::Formula(text));
-    }
-    // Literal body — concatenate text pieces' content (excluding inlines).
-    let mut s = String::new();
-    for p in pieces {
-        if let TextPiece::Literal { text, .. } = p {
-            s.push_str(text);
-        }
-    }
-    if s.is_empty() && pieces.is_empty() {
-        return None;
-    }
-    Some(crate::formula::CellSource::Literal(s))
-}
 
 /// Local copy of address parser — duplicated from cook to avoid a
 /// cross-crate dependency on internals. Returns (col_idx, row_idx)
 /// 0-based.
-fn parse_cell_address(s: &str) -> Option<(u32, u32)> {
+pub(crate) fn parse_cell_address(s: &str) -> Option<(u32, u32)> {
     if s.is_empty() {
         return None;
     }
@@ -683,7 +123,7 @@ fn parse_cell_address(s: &str) -> Option<(u32, u32)> {
     Some((n - 1, row_n - 1))
 }
 
-fn format_col_letter(mut n: u32) -> String {
+pub(crate) fn format_col_letter(mut n: u32) -> String {
     let mut s = String::new();
     n += 1;
     while n > 0 {
@@ -713,7 +153,7 @@ fn render_fallback_block(
 // Helpers
 // -----------------------------------------------------------
 
-fn render_children_of(
+pub(crate) fn render_children_of(
     out: &mut String,
     b: &Block,
     theme: &Theme,
@@ -726,7 +166,7 @@ fn render_children_of(
     Ok(())
 }
 
-fn render_text_body_inline(out: &mut String, b: &Block) -> Result<(), std::fmt::Error> {
+pub(crate) fn render_text_body_inline(out: &mut String, b: &Block) -> Result<(), std::fmt::Error> {
     if let Body::Text(pieces) = &b.body {
         for p in pieces {
             match p {
@@ -739,111 +179,22 @@ fn render_text_body_inline(out: &mut String, b: &Block) -> Result<(), std::fmt::
 }
 
 fn render_inline(out: &mut String, b: &Block) -> Result<(), std::fmt::Error> {
-    // Per-element dispatch: consult the migrated per-element render
-    // table first. Falls through to the legacy match arms for elements
-    // not yet moved.
+    // Per-element dispatch: each inline owns its own render fn in
+    // `elements::<name>`. Unknown inlines fall through to the generic
+    // tagged-span wrapper, preserving previous behavior.
     if let Some(el) = elements::lookup_inline(&b.name) {
-        return (el.render)(out, b);
+        return (el.render)(out, b, &Theme::default());
     }
-    match b.name.as_str() {
-        "text" => {
-            let mut style = String::new();
-            let theme = Theme::default();
-            for p in &b.properties {
-                match p.key.as_str() {
-                    "color" => {
-                        if let Some(c) = theme.resolve_color(p.value.as_str()) {
-                            write!(style, "color:{};", c.to_hex()).unwrap();
-                        }
-                    }
-                    "bg" => {
-                        if let Some(c) = theme.resolve_color(p.value.as_str()) {
-                            write!(style, "background:{};", c.to_hex()).unwrap();
-                        }
-                    }
-                    "weight" => match p.value.as_str() {
-                        "light" => style.push_str("font-weight:300;"),
-                        "regular" => style.push_str("font-weight:400;"),
-                        "bold" => style.push_str("font-weight:700;"),
-                        _ => {}
-                    },
-                    "style" => match p.value.as_str() {
-                        "italic" | "oblique" => style.push_str("font-style:italic;"),
-                        "normal" => style.push_str("font-style:normal;"),
-                        _ => {}
-                    },
-                    "decoration" => match p.value.as_str() {
-                        "underline" => style.push_str("text-decoration:underline;"),
-                        "strike" => style.push_str("text-decoration:line-through;"),
-                        "none" => style.push_str("text-decoration:none;"),
-                        _ => {}
-                    },
-                    _ => {}
-                }
-            }
-            write!(out, "<span style=\"{}\">", style)?;
-            for p in &b.body_text_pieces() {
-                write!(out, "{}", html_text(p))?;
-            }
-            write!(out, "</span>")?;
-        }
-        "footnote" => {
-            let mut text = String::new();
-            for s in b.body_text_pieces() {
-                text.push_str(&s);
-            }
-            write!(
-                out,
-                "<sup class=\"stem-footnote\" title=\"{}\">*</sup>",
-                html_attr(&text)
-            )?;
-        }
-        "code" => {
-            let mut text = String::new();
-            for s in b.body_text_pieces() {
-                text.push_str(&s);
-            }
-            write!(out, "<code>{}</code>", html_text(&text))?;
-        }
-        "date" => {
-            let mut text = String::new();
-            for s in b.body_text_pieces() {
-                text.push_str(&s);
-            }
-            write!(out, "<time>{}</time>", html_text(&text))?;
-        }
-        "mention" => {
-            let mut text = String::new();
-            for s in b.body_text_pieces() {
-                text.push_str(&s);
-            }
-            write!(
-                out,
-                "<span class=\"stem-mention\">{}</span>",
-                html_text(&text)
-            )?;
-        }
-        "math" => {
-            let mut text = String::new();
-            for s in b.body_text_pieces() {
-                text.push_str(&s);
-            }
-            write!(out, "<span class=\"stem-math\">{}</span>", html_text(&text))?;
-        }
-        _ => {
-            // Unknown inline → wrap in a tagged span
-            let mut text = String::new();
-            for s in b.body_text_pieces() {
-                text.push_str(&s);
-            }
-            write!(
-                out,
-                "<span data-stem=\"{}\">{}</span>",
-                html_attr(&b.name),
-                html_text(&text)
-            )?;
-        }
+    let mut text = String::new();
+    for s in b.body_text_pieces() {
+        text.push_str(&s);
     }
+    write!(
+        out,
+        "<span data-stem=\"{}\">{}</span>",
+        html_attr(&b.name),
+        html_text(&text)
+    )?;
     Ok(())
 }
 
@@ -865,7 +216,7 @@ impl BodyTextPieces for Block {
     }
 }
 
-fn grid_template_for(kind: &str) -> &'static str {
+pub(crate) fn grid_template_for(kind: &str) -> &'static str {
     match kind {
         "two-column" => "grid-template-columns:1fr 1fr;",
         "three-column" => "grid-template-columns:1fr 1fr 1fr;",
