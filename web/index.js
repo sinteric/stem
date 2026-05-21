@@ -97,19 +97,26 @@ section{
 const SHEET_DEMO = `[type:sheet, name:"Q4 Demo"]
 
 sheet[id:q4]{
+  col[at:A, width:120]
   col[at:B, fmt:currency]
   col[at:C, fmt:percent]
   row[at:1, weight:bold, bg:gray]
 
-  fill[at:A1]("
-    Item, Revenue, Margin
-    Widget, 42000, 0.35
-    Gadget, 38500, 0.42
-    Sprocket, 19200, 0.28
-    Total, 99700, 0.35
-  ")
+  // Header
+  cell[at:A1](Item)
+  cell[at:B1](Revenue)
+  cell[at:C1](Margin)
 
-  cell[at:C5, bg:yellow]
+  // Data rows
+  cell[at:A2](Widget)    cell[at:B2](42000)  cell[at:C2](0.35)
+  cell[at:A3](Gadget)    cell[at:B3](38500)  cell[at:C3](0.42)
+  cell[at:A4](Sprocket)  cell[at:B4](19200)  cell[at:C4](0.28)
+
+  // Total row — formulas reference the cells above
+  cell[at:A5, weight:bold](Total)
+  cell[at:B5, weight:bold](@formula("SUM(B2:B4)"))
+  cell[at:C5, weight:bold, bg:yellow](@formula("AVERAGE(C2:C4)"))
+
   format[at:"A1:C1", align:center]
 }
 `;

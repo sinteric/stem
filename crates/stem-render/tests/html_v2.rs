@@ -159,6 +159,37 @@ sheet[id:Q4-2026]{
 }
 
 #[test]
+fn sheet_formula_via_at_inline_element() {
+    // Cells declare formulas with @formula(...) — NOT with leading =.
+    let src = r#"[type:sheet]
+sheet[id:demo]{
+  col[at:B, fmt:currency]
+  cell[at:A1](10)
+  cell[at:A2](20)
+  cell[at:A3](30)
+  cell[at:B1](@formula("SUM(A1:A3)"))
+}"#;
+    let html = render(src);
+    // SUM(10, 20, 30) = 60 → currency format → $60.00
+    assert!(html.contains("$60.00"), "missing evaluated value: {}", html);
+}
+
+#[test]
+fn sheet_formula_with_leading_equals_surfaces_error() {
+    let src = r#"[type:sheet]
+sheet[id:demo]{
+  cell[at:A1](@formula("=SUM(B2:B6)"))
+}"#;
+    let html = render(src);
+    // The renderer surfaces the embed's typed error in the cell display.
+    assert!(
+        html.contains("#ERROR"),
+        "expected formula error in cell display: {}",
+        html
+    );
+}
+
+#[test]
 fn sheet_with_no_cells_shows_empty_message() {
     let html = render("[type:sheet]\nsheet[id:empty]{}");
     assert!(html.contains("(empty sheet)"));

@@ -439,8 +439,11 @@ fn render_sheet(out: &mut String, b: &Block, theme: &Theme) -> Result<(), std::f
     let mut max_col: i64 = -1;
     let mut max_row: i64 = -1;
 
-    // Build a body-text map for the formula evaluator.
-    let mut cell_bodies: std::collections::HashMap<(u32, u32), String> =
+    // Build a source map for the formula evaluator. Cells whose body
+    // is a single `@formula(...)` inline element become CellSource::Formula
+    // — extracting the formula's body text. Everything else (plain text
+    // bodies, numbers) becomes CellSource::Literal.
+    let mut cell_sources: std::collections::HashMap<(u32, u32), crate::formula::CellSource> =
         std::collections::HashMap::new();
 
     if let Body::Children(kids) = &b.body {
@@ -454,9 +457,8 @@ fn render_sheet(out: &mut String, b: &Block, theme: &Theme) -> Result<(), std::f
             };
             if let Some((c, r)) = parse_cell_address(at) {
                 by_pos.insert((c, r), child);
-                let body = child.plain_text().unwrap_or_default();
-                if !body.is_empty() {
-                    cell_bodies.insert((c, r), body);
+                if let Some(source) = extract_cell_source(child) {
+                    cell_sources.insert((c, r), source);
                 }
                 if (c as i64) > max_col {
                     max_col = c as i64;
@@ -470,7 +472,7 @@ fn render_sheet(out: &mut String, b: &Block, theme: &Theme) -> Result<(), std::f
 
     // Evaluate all formulas. The returned map has Num/Str/Error per cell.
     let evaluated: std::collections::HashMap<(u32, u32), crate::formula::Value> =
-        crate::formula::evaluate_sheet::<fn(u32, u32) -> Option<String>>(&cell_bodies);
+        crate::formula::evaluate_sheet(&cell_sources);
 
     if max_col < 0 || max_row < 0 {
         writeln!(
@@ -558,11 +560,21 @@ fn render_sheet_cell(
     }
     let fmt = cell.prop_str("fmt");
     let raw_body = cell.plain_text().unwrap_or_default();
-    let is_formula = raw_body.trim_start().starts_with('=');
+
+    // Detect "this cell is a formula cell" by looking for the @formula
+    // inline element in its body. Mirrors extract_cell_source.
+    let formula_inline = if let Body::Text(pieces) = &cell.body {
+        pieces.iter().find_map(|p| match p {
+            TextPiece::Inline(b) if b.name == "formula" => Some(b),
+            _ => None,
+        })
+    } else {
+        None
+    };
+    let is_formula = formula_inline.is_some();
 
     // Display: evaluated value formatted per fmt if available, otherwise raw body.
     let display = if let Some(value) = evaluated {
-        // Use evaluated value for formulas and for plain numbers (so currency/percent applies).
         if is_formula || matches!(value, crate::formula::Value::Num(_)) {
             crate::formula::format_value(value, fmt)
         } else {
@@ -572,11 +584,13 @@ fn render_sheet_cell(
         raw_body.clone()
     };
 
-    // Title attr shows the formula source for evaluated cells (hover tooltip).
-    let title = if is_formula {
-        format!(" title=\"{}\"", html_attr(&raw_body))
-    } else {
-        String::new()
+    // Title attr shows the original formula text on hover.
+    let title = match formula_inline {
+        Some(b) => format!(
+            " title=\"@formula({})\"",
+            html_attr(&b.plain_text().unwrap_or_default())
+        ),
+        None => String::new(),
     };
 
     write!(
@@ -593,6 +607,57 @@ fn render_sheet_cell(
     }
     writeln!(out, "</td>")?;
     Ok(())
+}
+
+/// Inspect a `cell[at:X](body)` and decide whether its body is a
+/// formula or a literal. Returns the corresponding `CellSource`, or
+/// `None` if the cell has no body at all.
+///
+/// A formula cell has a body of exactly one `@formula(...)` inline
+/// element (with optional surrounding whitespace). Mixed bodies (text
+/// + `@formula` + text) are treated as literals — the inline `@formula`
+/// still renders via the normal inline path when displaying the cell.
+fn extract_cell_source(cell: &Block) -> Option<crate::formula::CellSource> {
+    let pieces = match &cell.body {
+        Body::Text(p) => p,
+        _ => return None,
+    };
+    // Walk pieces, skip whitespace-only literals, find one inline @formula.
+    let mut found: Option<&Block> = None;
+    let mut had_other = false;
+    for p in pieces {
+        match p {
+            TextPiece::Literal { text, .. } => {
+                if !text.trim().is_empty() {
+                    had_other = true;
+                }
+            }
+            TextPiece::Inline(b) if b.name == "formula" => {
+                if found.is_some() {
+                    had_other = true; // multiple formulas — treat as literal
+                }
+                found = Some(b);
+            }
+            TextPiece::Inline(_) => {
+                had_other = true;
+            }
+        }
+    }
+    if let (Some(inline), false) = (found, had_other) {
+        let text = inline.plain_text().unwrap_or_default();
+        return Some(crate::formula::CellSource::Formula(text));
+    }
+    // Literal body — concatenate text pieces' content (excluding inlines).
+    let mut s = String::new();
+    for p in pieces {
+        if let TextPiece::Literal { text, .. } = p {
+            s.push_str(text);
+        }
+    }
+    if s.is_empty() && pieces.is_empty() {
+        return None;
+    }
+    Some(crate::formula::CellSource::Literal(s))
 }
 
 /// Local copy of address parser — duplicated from cook_v2 to avoid a

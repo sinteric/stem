@@ -1,19 +1,73 @@
-//! Spreadsheet formula engine. Lex → parse → evaluate.
+//! Spreadsheet formula embed for Stem.
 //!
-//! Supports the common case for v2.0 demos:
-//! - Number literals (`42`, `-3.14`, `0.35`)
-//! - Cell references (`A1`, `AB12`)
-//! - Ranges inside function args (`B2:B6`)
-//! - Operators: `+ - * / ^` and unary `-`
-//! - Parens for grouping
-//! - Functions: `SUM`, `AVERAGE`/`AVG`, `MIN`, `MAX`, `COUNT`,
-//!   `IF(cond, then, else)`, `ABS`, `ROUND`
+//! This crate is one of the "expression language" embeds — it gets
+//! invoked when a renderer or validator encounters an `@formula(...)`
+//! inline element. The Stem AST stays uniform; this crate owns the
+//! formula-specific syntax rules, parsing, evaluation, and value
+//! formatting.
 //!
-//! NOT supported (yet): string concatenation, comparison operators,
-//! boolean literals, nested ranges, structured references, lookups
-//! (VLOOKUP/INDEX/MATCH). All easy to add later.
+//! ## Syntax rules enforced here
+//!
+//! - **No leading `=`.** Inside `@formula(...)`, the `@formula`
+//!   wrapper IS the marker. A stray `=` is a `FormulaError::UnexpectedEqualsPrefix`
+//!   diagnostic; we do NOT silently strip it.
+//! - Number literals, cell refs (`A1`, `AB12`), ranges (`B2:B6`),
+//!   operators `+ - * / ^` (right-assoc) and unary `-`, parens,
+//!   function calls.
+//! - Built-in functions: `SUM`, `AVG`/`AVERAGE`, `MIN`, `MAX`,
+//!   `COUNT`, `IF(cond, then, else)`, `ABS`, `ROUND`.
+//!
+//! ## Not supported (yet)
+//!
+//! Boolean literals, comparison operators (`>`, `<`, `=`), string
+//! concatenation (`&`), structured references, lookups
+//! (VLOOKUP/INDEX/MATCH), array formulas, absolute refs (`$A$1`).
+//! All easy to add later — the parser is intentionally small.
 
 use std::collections::{HashMap, HashSet};
+
+use thiserror::Error;
+
+/// Typed errors from this embed crate. Each variant maps to a stable
+/// diagnostic code that renderers/validators surface through the Stem
+/// diagnostic pipeline.
+#[derive(Clone, Debug, PartialEq, Eq, Error)]
+pub enum FormulaError {
+    /// `@formula("=SUM(...)")` — the `@formula` wrapper is already the
+    /// "this is a formula" marker; the leading `=` is redundant and
+    /// not accepted.
+    #[error("`=` prefix is not allowed inside `@formula` — the wrapper is already the marker. Write `@formula(\"SUM(...)\")` instead")]
+    UnexpectedEqualsPrefix,
+    #[error("unexpected character `{0}` in formula")]
+    UnexpectedChar(char),
+    #[error("invalid number literal: {0}")]
+    BadNumber(String),
+    #[error("unexpected token after expression: {0}")]
+    UnexpectedTrailing(String),
+    #[error("expected `{0}`, got {1}")]
+    Expected(&'static str, String),
+    #[error("expected atom, got {0}")]
+    ExpectedAtom(String),
+    #[error("unknown identifier or invalid cell ref: {0}")]
+    UnknownIdent(String),
+}
+
+impl FormulaError {
+    /// Stable diagnostic code for this error, e.g.
+    /// `formula.unexpected_equals_prefix`. Third-party tools and the
+    /// LSP key off these.
+    pub fn code(&self) -> &'static str {
+        match self {
+            FormulaError::UnexpectedEqualsPrefix => "formula.unexpected_equals_prefix",
+            FormulaError::UnexpectedChar(_) => "formula.unexpected_char",
+            FormulaError::BadNumber(_) => "formula.bad_number",
+            FormulaError::UnexpectedTrailing(_) => "formula.unexpected_trailing",
+            FormulaError::Expected(_, _) => "formula.expected",
+            FormulaError::ExpectedAtom(_) => "formula.expected_atom",
+            FormulaError::UnknownIdent(_) => "formula.unknown_ident",
+        }
+    }
+}
 
 #[derive(Clone, Debug, PartialEq)]
 pub enum Value {
@@ -62,17 +116,26 @@ pub enum Op {
 // Public entry points
 // ============================================================
 
-/// Parse a formula source string. The leading `=` (if present) is stripped.
-pub fn parse_formula(src: &str) -> Result<Expr, String> {
-    let s = src.trim_start_matches('=').trim();
+/// Parse a formula source string into an [`Expr`].
+///
+/// `@formula` is the marker; the formula body itself MUST NOT begin
+/// with `=`. A leading `=` returns [`FormulaError::UnexpectedEqualsPrefix`]
+/// — we do NOT silently strip it. (Excel users have muscle memory for
+/// `=`, but that habit lives in the formula-bar UI, not in stored data.
+/// In Stem source the `@formula` wrapper does the same job.)
+pub fn parse_formula(src: &str) -> Result<Expr, FormulaError> {
+    let s = src.trim();
+    if s.starts_with('=') {
+        return Err(FormulaError::UnexpectedEqualsPrefix);
+    }
     let tokens = lex(s)?;
     let mut p = Parser { tokens, pos: 0 };
     let expr = p.parse_expr()?;
     if p.pos != p.tokens.len() {
-        return Err(format!(
-            "unexpected token after expression: {:?}",
+        return Err(FormulaError::UnexpectedTrailing(format!(
+            "{:?}",
             p.tokens[p.pos]
-        ));
+        )));
     }
     Ok(expr)
 }
@@ -227,7 +290,7 @@ enum Tok {
     Caret,
 }
 
-fn lex(s: &str) -> Result<Vec<Tok>, String> {
+fn lex(s: &str) -> Result<Vec<Tok>, FormulaError> {
     let bytes = s.as_bytes();
     let mut out = Vec::new();
     let mut i = 0;
@@ -279,8 +342,10 @@ fn lex(s: &str) -> Result<Vec<Tok>, String> {
                     i += 1;
                 }
                 let s = std::str::from_utf8(&bytes[start..i])
-                    .map_err(|e| e.to_string())?;
-                let n: f64 = s.parse().map_err(|e: std::num::ParseFloatError| e.to_string())?;
+                    .map_err(|e| FormulaError::BadNumber(e.to_string()))?;
+                let n: f64 = s
+                    .parse()
+                    .map_err(|e: std::num::ParseFloatError| FormulaError::BadNumber(e.to_string()))?;
                 out.push(Tok::Num(n));
             }
             b'A'..=b'Z' | b'a'..=b'z' | b'_' => {
@@ -291,10 +356,10 @@ fn lex(s: &str) -> Result<Vec<Tok>, String> {
                     i += 1;
                 }
                 let s = std::str::from_utf8(&bytes[start..i])
-                    .map_err(|e| e.to_string())?;
+                    .map_err(|e| FormulaError::BadNumber(e.to_string()))?;
                 out.push(Tok::Ident(s.to_string()));
             }
-            _ => return Err(format!("unexpected character `{}` in formula", b as char)),
+            _ => return Err(FormulaError::UnexpectedChar(b as char)),
         }
     }
     Ok(out)
@@ -321,11 +386,11 @@ impl Parser {
         t
     }
 
-    fn parse_expr(&mut self) -> Result<Expr, String> {
+    fn parse_expr(&mut self) -> Result<Expr, FormulaError> {
         self.parse_add()
     }
 
-    fn parse_add(&mut self) -> Result<Expr, String> {
+    fn parse_add(&mut self) -> Result<Expr, FormulaError> {
         let mut lhs = self.parse_mul()?;
         while let Some(tok) = self.peek() {
             let op = match tok {
@@ -340,7 +405,7 @@ impl Parser {
         Ok(lhs)
     }
 
-    fn parse_mul(&mut self) -> Result<Expr, String> {
+    fn parse_mul(&mut self) -> Result<Expr, FormulaError> {
         let mut lhs = self.parse_pow()?;
         while let Some(tok) = self.peek() {
             let op = match tok {
@@ -355,7 +420,7 @@ impl Parser {
         Ok(lhs)
     }
 
-    fn parse_pow(&mut self) -> Result<Expr, String> {
+    fn parse_pow(&mut self) -> Result<Expr, FormulaError> {
         let lhs = self.parse_unary()?;
         if matches!(self.peek(), Some(Tok::Caret)) {
             self.bump();
@@ -367,7 +432,7 @@ impl Parser {
         }
     }
 
-    fn parse_unary(&mut self) -> Result<Expr, String> {
+    fn parse_unary(&mut self) -> Result<Expr, FormulaError> {
         if matches!(self.peek(), Some(Tok::Minus)) {
             self.bump();
             let e = self.parse_unary()?;
@@ -380,14 +445,14 @@ impl Parser {
         }
     }
 
-    fn parse_atom(&mut self) -> Result<Expr, String> {
+    fn parse_atom(&mut self) -> Result<Expr, FormulaError> {
         match self.bump() {
             Some(Tok::Num(n)) => Ok(Expr::Num(n)),
             Some(Tok::LParen) => {
                 let e = self.parse_expr()?;
                 match self.bump() {
                     Some(Tok::RParen) => Ok(e),
-                    other => Err(format!("expected `)`, got {:?}", other)),
+                    other => Err(FormulaError::Expected(")", format!("{:?}", other))),
                 }
             }
             Some(Tok::Ident(name)) => {
@@ -408,9 +473,9 @@ impl Parser {
                                 }
                                 Some(Tok::RParen) => break,
                                 other => {
-                                    return Err(format!(
-                                        "expected `,` or `)` in arg list, got {:?}",
-                                        other
+                                    return Err(FormulaError::Expected(
+                                        "`,` or `)` in arg list",
+                                        format!("{:?}", other),
                                     ))
                                 }
                             }
@@ -418,21 +483,21 @@ impl Parser {
                     }
                     match self.bump() {
                         Some(Tok::RParen) => Ok(Expr::Call(name, args)),
-                        other => Err(format!("expected `)` after args, got {:?}", other)),
+                        other => Err(FormulaError::Expected(") after args", format!("{:?}", other))),
                     }
                 } else if let Some((c, r)) = parse_cell_ident(&name) {
                     Ok(Expr::CellRef(c, r))
                 } else {
-                    Err(format!("unknown identifier or invalid cell ref: {}", name))
+                    Err(FormulaError::UnknownIdent(name))
                 }
             }
-            other => Err(format!("expected atom, got {:?}", other)),
+            other => Err(FormulaError::ExpectedAtom(format!("{:?}", other))),
         }
     }
 
     /// Parse a function argument. Detects `cell:cell` as a Range; falls
     /// back to a regular expression otherwise.
-    fn parse_arg(&mut self) -> Result<Expr, String> {
+    fn parse_arg(&mut self) -> Result<Expr, FormulaError> {
         // Lookahead: ident colon ident → range
         if let (Some(Tok::Ident(a)), Some(Tok::Colon), Some(Tok::Ident(b))) = (
             self.tokens.get(self.pos).cloned(),
@@ -487,35 +552,50 @@ fn parse_cell_ident(s: &str) -> Option<(u32, u32)> {
 // Dependency-resolving evaluator for sheets
 // ============================================================
 
+/// What kind of content a cell holds. Callers (renderers, validators)
+/// build this from the AST — typically by checking whether a cell's
+/// body is an `@formula(...)` inline element vs literal text.
+#[derive(Clone, Debug)]
+pub enum CellSource {
+    /// Raw text body — parsed as a number if it looks like one,
+    /// otherwise kept as a string.
+    Literal(String),
+    /// Inside an `@formula(...)` block — the formula text WITHOUT
+    /// any `=` prefix. The embed validates and evaluates.
+    Formula(String),
+}
+
 /// Evaluate every formula cell in a sheet, returning a map from
-/// (col, row) → resolved `Value`. Cells without formulas (raw text or
-/// numbers) get stored as `Num(n)` if parseable, else `Str(text)`.
+/// (col, row) → resolved `Value`. Literal cells get stored as
+/// `Num(n)` if parseable, else `Str(text)`.
 ///
 /// Detects cycles and marks every cell in a cycle as `Value::Error`.
-pub fn evaluate_sheet<F>(cells: &HashMap<(u32, u32), String>) -> HashMap<(u32, u32), Value>
-where
-    F: Fn(u32, u32) -> Option<String>,
-{
-    // Parse formulas up front; non-formula cells stay as text.
+pub fn evaluate_sheet(cells: &HashMap<(u32, u32), CellSource>) -> HashMap<(u32, u32), Value> {
     enum Slot {
         Literal(Value),
         Formula(Expr),
     }
     let mut slots: HashMap<(u32, u32), Slot> = HashMap::new();
-    for (&addr, body) in cells {
-        if let Some(rest) = body.strip_prefix('=') {
-            match parse_formula(rest) {
+    for (&addr, source) in cells {
+        match source {
+            CellSource::Formula(body) => match parse_formula(body) {
                 Ok(expr) => {
                     slots.insert(addr, Slot::Formula(expr));
                 }
                 Err(e) => {
-                    slots.insert(addr, Slot::Literal(Value::Error(format!("parse: {}", e))));
+                    slots.insert(
+                        addr,
+                        Slot::Literal(Value::Error(format!("{} ({})", e, e.code()))),
+                    );
+                }
+            },
+            CellSource::Literal(body) => {
+                if let Ok(n) = body.trim().parse::<f64>() {
+                    slots.insert(addr, Slot::Literal(Value::Num(n)));
+                } else {
+                    slots.insert(addr, Slot::Literal(Value::Str(body.clone())));
                 }
             }
-        } else if let Ok(n) = body.trim().parse::<f64>() {
-            slots.insert(addr, Slot::Literal(Value::Num(n)));
-        } else {
-            slots.insert(addr, Slot::Literal(Value::Str(body.clone())));
         }
     }
 
@@ -575,7 +655,6 @@ where
     for addr in addrs {
         let _ = resolve(addr, &slots, &mut memo, &mut in_progress);
     }
-    let _ = std::marker::PhantomData::<F>;
     memo
 }
 
@@ -672,77 +751,90 @@ mod tests {
     #[test]
     fn arithmetic_basic() {
         let e = env(&[]);
-        assert_eq!(ev("=1+2", &e), Value::Num(3.0));
-        assert_eq!(ev("=10-3", &e), Value::Num(7.0));
-        assert_eq!(ev("=2*3", &e), Value::Num(6.0));
-        assert_eq!(ev("=10/4", &e), Value::Num(2.5));
-        assert_eq!(ev("=2^3", &e), Value::Num(8.0));
+        assert_eq!(ev("1+2", &e), Value::Num(3.0));
+        assert_eq!(ev("10-3", &e), Value::Num(7.0));
+        assert_eq!(ev("2*3", &e), Value::Num(6.0));
+        assert_eq!(ev("10/4", &e), Value::Num(2.5));
+        assert_eq!(ev("2^3", &e), Value::Num(8.0));
     }
 
     #[test]
     fn arithmetic_precedence() {
         let e = env(&[]);
-        assert_eq!(ev("=1+2*3", &e), Value::Num(7.0));
-        assert_eq!(ev("=(1+2)*3", &e), Value::Num(9.0));
-        assert_eq!(ev("=2^3^2", &e), Value::Num(512.0)); // right-assoc: 2^(3^2)
+        assert_eq!(ev("1+2*3", &e), Value::Num(7.0));
+        assert_eq!(ev("(1+2)*3", &e), Value::Num(9.0));
+        assert_eq!(ev("2^3^2", &e), Value::Num(512.0)); // right-assoc: 2^(3^2)
     }
 
     #[test]
     fn unary_minus() {
         let e = env(&[]);
-        assert_eq!(ev("=-5", &e), Value::Num(-5.0));
-        assert_eq!(ev("=-(2+3)", &e), Value::Num(-5.0));
-        assert_eq!(ev("=10+-3", &e), Value::Num(7.0));
+        assert_eq!(ev("-5", &e), Value::Num(-5.0));
+        assert_eq!(ev("-(2+3)", &e), Value::Num(-5.0));
+        assert_eq!(ev("10+-3", &e), Value::Num(7.0));
     }
 
     #[test]
     fn cell_ref_lookup() {
         let e = env(&[(0, 0, 100.0)]); // A1 = 100
-        assert_eq!(ev("=A1", &e), Value::Num(100.0));
-        assert_eq!(ev("=A1*2", &e), Value::Num(200.0));
+        assert_eq!(ev("A1", &e), Value::Num(100.0));
+        assert_eq!(ev("A1*2", &e), Value::Num(200.0));
     }
 
     #[test]
     fn sum_range() {
         let e = env(&[(0, 0, 1.0), (0, 1, 2.0), (0, 2, 3.0)]); // A1=1 A2=2 A3=3
-        assert_eq!(ev("=SUM(A1:A3)", &e), Value::Num(6.0));
+        assert_eq!(ev("SUM(A1:A3)", &e), Value::Num(6.0));
     }
 
     #[test]
     fn avg_min_max_count() {
         let e = env(&[(0, 0, 10.0), (0, 1, 20.0), (0, 2, 30.0)]);
-        assert_eq!(ev("=AVERAGE(A1:A3)", &e), Value::Num(20.0));
-        assert_eq!(ev("=AVG(A1:A3)", &e), Value::Num(20.0));
-        assert_eq!(ev("=MIN(A1:A3)", &e), Value::Num(10.0));
-        assert_eq!(ev("=MAX(A1:A3)", &e), Value::Num(30.0));
-        assert_eq!(ev("=COUNT(A1:A3)", &e), Value::Num(3.0));
+        assert_eq!(ev("AVERAGE(A1:A3)", &e), Value::Num(20.0));
+        assert_eq!(ev("AVG(A1:A3)", &e), Value::Num(20.0));
+        assert_eq!(ev("MIN(A1:A3)", &e), Value::Num(10.0));
+        assert_eq!(ev("MAX(A1:A3)", &e), Value::Num(30.0));
+        assert_eq!(ev("COUNT(A1:A3)", &e), Value::Num(3.0));
     }
 
     #[test]
     fn division_by_zero_errors() {
         let e = env(&[]);
-        assert!(ev("=10/0", &e).is_error());
+        assert!(ev("10/0", &e).is_error());
     }
 
     #[test]
     fn unknown_function_errors() {
         let e = env(&[]);
-        assert!(ev("=BOGUS(1, 2)", &e).is_error());
+        assert!(ev("BOGUS(1, 2)", &e).is_error());
+    }
+
+    #[test]
+    fn leading_equals_is_rejected() {
+        let err = parse_formula("=SUM(B2:B6)").unwrap_err();
+        assert_eq!(err, FormulaError::UnexpectedEqualsPrefix);
+        assert_eq!(err.code(), "formula.unexpected_equals_prefix");
+    }
+
+    #[test]
+    fn whitespace_before_equals_still_rejected() {
+        let err = parse_formula("  =1+2").unwrap_err();
+        assert_eq!(err, FormulaError::UnexpectedEqualsPrefix);
     }
 
     #[test]
     fn abs_and_round() {
         let e = env(&[]);
-        assert_eq!(ev("=ABS(-7)", &e), Value::Num(7.0));
-        assert_eq!(ev("=ROUND(3.14159, 2)", &e), Value::Num(3.14));
-        assert_eq!(ev("=ROUND(2.5, 0)", &e), Value::Num(3.0));
+        assert_eq!(ev("ABS(-7)", &e), Value::Num(7.0));
+        assert_eq!(ev("ROUND(3.14159, 2)", &e), Value::Num(3.14));
+        assert_eq!(ev("ROUND(2.5, 0)", &e), Value::Num(3.0));
     }
 
     #[test]
     fn if_function() {
         let e = env(&[]);
-        assert_eq!(ev("=IF(1, 10, 20)", &e), Value::Num(10.0));
-        assert_eq!(ev("=IF(0, 10, 20)", &e), Value::Num(20.0));
+        assert_eq!(ev("IF(1, 10, 20)", &e), Value::Num(10.0));
+        assert_eq!(ev("IF(0, 10, 20)", &e), Value::Num(20.0));
     }
 
     #[test]
@@ -770,25 +862,35 @@ mod tests {
 
     #[test]
     fn evaluate_sheet_solves_chain() {
-        // A1 = 10, A2 = 20, A3 = =SUM(A1:A2), A4 = =A3*2
-        let mut cells = HashMap::new();
-        cells.insert((0, 0), "10".to_string());
-        cells.insert((0, 1), "20".to_string());
-        cells.insert((0, 2), "=SUM(A1:A2)".to_string());
-        cells.insert((0, 3), "=A3*2".to_string());
-        let r = evaluate_sheet::<fn(u32, u32) -> Option<String>>(&cells);
+        // A1 = 10, A2 = 20, A3 = SUM(A1:A2), A4 = A3*2
+        let mut cells: HashMap<(u32, u32), CellSource> = HashMap::new();
+        cells.insert((0, 0), CellSource::Literal("10".into()));
+        cells.insert((0, 1), CellSource::Literal("20".into()));
+        cells.insert((0, 2), CellSource::Formula("SUM(A1:A2)".into()));
+        cells.insert((0, 3), CellSource::Formula("A3*2".into()));
+        let r = evaluate_sheet(&cells);
         assert_eq!(r.get(&(0, 2)), Some(&Value::Num(30.0)));
         assert_eq!(r.get(&(0, 3)), Some(&Value::Num(60.0)));
     }
 
     #[test]
     fn evaluate_sheet_detects_cycle() {
-        // A1 = =A2, A2 = =A1
-        let mut cells = HashMap::new();
-        cells.insert((0, 0), "=A2".to_string());
-        cells.insert((0, 1), "=A1".to_string());
-        let r = evaluate_sheet::<fn(u32, u32) -> Option<String>>(&cells);
+        // A1 = A2, A2 = A1
+        let mut cells: HashMap<(u32, u32), CellSource> = HashMap::new();
+        cells.insert((0, 0), CellSource::Formula("A2".into()));
+        cells.insert((0, 1), CellSource::Formula("A1".into()));
+        let r = evaluate_sheet(&cells);
         assert!(r.get(&(0, 0)).unwrap().is_error());
         assert!(r.get(&(0, 1)).unwrap().is_error());
+    }
+
+    #[test]
+    fn equals_prefix_in_formula_source_becomes_error_in_eval() {
+        // Renderer might forget to strip = before passing to formula —
+        // we want the resulting cell to surface the diagnostic, not crash.
+        let mut cells: HashMap<(u32, u32), CellSource> = HashMap::new();
+        cells.insert((0, 0), CellSource::Formula("=1+2".into()));
+        let r = evaluate_sheet(&cells);
+        assert!(matches!(r.get(&(0, 0)), Some(Value::Error(_))));
     }
 }

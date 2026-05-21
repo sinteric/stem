@@ -296,6 +296,17 @@ const MATH: ElementSchema = ElementSchema {
     doc: "Inline or block math expression",
 };
 
+const FORMULA: ElementSchema = ElementSchema {
+    name: "formula",
+    categories: &[Inline, BlockLeaf],
+    doc_types: ALL,
+    bodies: &[Text],
+    parents: &["any-text-body", "any-block-container"],
+    children: &[],
+    properties: &[],
+    doc: "Spreadsheet formula expression. The body is the formula text (no leading `=`). Inside a `cell` body it becomes the cell's computed value; in prose, it evaluates with an empty cell env.",
+};
+
 // --- Document structural ---
 
 const SECTION: ElementSchema = ElementSchema {
@@ -856,7 +867,7 @@ const CHART: ElementSchema = ElementSchema {
 // matching variant.
 const BUILTINS: &[ElementSchema] = &[
     // Universal inline
-    TEXT, FOOTNOTE, CODE_EL, LINK, DATE, MENTION, MATH,
+    TEXT, FOOTNOTE, CODE_EL, LINK, DATE, MENTION, MATH, FORMULA,
     // Document structural
     SECTION, LAYOUT, COL_LAYOUT, PAGEBREAK, HR,
     // Headings
