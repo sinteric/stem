@@ -254,3 +254,17 @@ fn math_unsupported_notation_emits_error_span() {
         html
     );
 }
+
+#[test]
+fn literal_cell_with_fmt_currency_renders_formatted() {
+    let src = r#"[type:sheet]
+sheet[id:demo]{
+  cell[at:A1, fmt:currency](42000)
+}"#;
+    let html = render(src);
+    assert!(
+        html.contains("$42,000.00"),
+        "expected currency-formatted literal, got: {}",
+        html
+    );
+}

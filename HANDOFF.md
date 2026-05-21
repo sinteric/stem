@@ -20,12 +20,24 @@ playground is live. docx/pdf renderers are stubbed.
 
 ## Current state
 
-- **124 tests, all green.** `cargo test --workspace`.
+- **134 tests, all green.** `cargo test --workspace`.
 - **Workspace builds clean.** `cargo build --workspace`.
 - **Playground works.** `./scripts/serve-playground.sh` → http://localhost:8080
-- **No v1.** A grammar v1 existed during the design pass and was
-  deleted in commit `?` (most recent). The current grammar is the
-  only grammar — there's nothing to migrate.
+- **Per-element layout.** Every element lives in its own file under
+  `stem-types/src/elements/<name>.rs` (vocabulary: schema + optional
+  validate fn) and `stem-render/src/html/elements/<name>.rs` (HTML
+  render fn). Adding a new element is two files.
+- **Custom doc types supported.** `DocumentType::Custom(&'static str)`
+  lets embedders introduce new doc types (mindmap, whiteboard, …) at
+  compile time. `Registry::resolve_doc_type` connects `type:foo`
+  metadata to the registered Custom variant.
+- **@math renders real MathML** via `pulldown-latex`. `@math[notation:latex]`
+  (default), `notation:mathml` pass-through, `notation:asciimath` not
+  yet implemented.
+- **@formula validates at validate time.** Syntax errors (leading `=`,
+  bad parens, etc.) surface as `formula.*` diagnostics before render.
+- **Literal numeric cells format** with `fmt:currency` etc. Same formatter
+  path as formula cells.
 
 ## Repo layout (quick)
 
@@ -33,8 +45,10 @@ playground is live. docx/pdf renderers are stubbed.
 crates/
   stem-core/     AST, spans, diagnostics, theme
   stem-parser/   text → AST, cook pass (sheet desugar/merge/cascade)
-  stem-types/    schema + per-(name, doc-type) validator
-  stem-render/   Renderer trait, HTML renderer, formula evaluator
+  stem-types/    schema, validator, formula parser/evaluator,
+                 per-element vocabulary in elements/<name>.rs
+  stem-render/   Renderer trait, HTML renderer (per-element fns in
+                 html/elements/<name>.rs), math LaTeX→MathML
   stem-cli/      `stem` binary (stdin/stdout-only)
   stem-lsp/      `stem-lsp` binary (tower-lsp)
   stem-wasm/     wasm-bindgen wrapper for playground
@@ -46,6 +60,23 @@ web/             playground HTML/JS/CSS (loads web/pkg/stem_wasm.js)
 scripts/
   serve-playground.sh   build wasm + serve
 ```
+
+### Per-element layout
+
+Adding a new element = two files following the same naming convention:
+
+- **Vocabulary** (`stem-types/src/elements/<name>.rs`): exports one
+  `pub const NAME: ElementDef = ElementDef { schema, validate }`. Add
+  the const to `stem-types::elements::ALL` slice.
+- **HTML rendering** (`stem-render/src/html/elements/<name>.rs`):
+  exports `pub const NAME: HtmlElement = HtmlElement { name, render }`.
+  Add to `INLINE_RENDERERS` or `BLOCK_RENDERERS` in
+  `stem-render::html::elements`.
+
+Cross-doc-type names (`col`, `row`, `cell`) co-locate both variants
+in the same vocab file (e.g. `cell.rs` exports `CELL_DOC` and
+`CELL_SHEET`). The validator's `(name, doc_type)` lookup picks the
+right one.
 
 ## Build / run / test
 
@@ -87,23 +118,21 @@ These are not bugs — they're scope choices for a future version:
   implementation contract. `docx-rs` would be the obvious crate.
 - **pdf renderer** (`crates/stem-render/src/pdf.rs`) — stub. Two
   paths: HTML→headless-Chromium, or native via Typst.
-- **Formula validate-time checking** — `@formula(...)` errors today
-  only surface at render time. Could be added by having
-  `stem-types::validate` call into `stem_render::formula::parse_formula`
-  to catch syntax errors before render.
 - **Schema extractor** — `docs/schema.md` has machine-readable
   `stem-schema` fenced blocks intended for tooling extraction. The
-  Rust mirror in `stem-types/src/schema.rs` is currently hand-kept.
+  Rust mirror in `stem-types/src/elements/` is currently hand-kept.
 - **Cross-sheet refs in formulas** — `Sheet!Range` syntax in formula
   bodies parses as an ident-without-cell-ref; not resolved.
-- **Numeric formatting on literal cells** — `cell[at:B2,
-  fmt:currency](42000)` renders raw "42000". Formula cells DO get
-  formatted (`@formula("SUM(B1:B5)")` → "$X,XXX.XX"). Literal cells
-  would need the same formatter path.
+- **AsciiMath notation** — `@math[notation:asciimath]` returns an error
+  span. Only `latex` and `mathml` are implemented.
 - **Korean/CJK list markers in HTML output** — schema declares
   `ol[style:가.]` as valid, but HTML's `<ol>` doesn't render Korean
   ordinals natively. Would need CSS counter-style rules in the
   rendered output.
+- **Doc-type extension at runtime** — `DocumentType::Custom` takes
+  `&'static str`, so new doc types must be declared at embedder
+  compile time. Loading doc-type definitions from a config file at
+  runtime would need a String-backed variant.
 
 ## Suggested next moves
 

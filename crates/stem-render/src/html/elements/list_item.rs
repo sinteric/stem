@@ -17,7 +17,7 @@ fn render(out: &mut String, b: &Block, theme: &Theme) -> Result<(), std::fmt::Er
     }
     write!(out, ">")?;
     match &b.body {
-        Body::Text(_) => render_text_body_inline(out, b)?,
+        Body::Text(_) => render_text_body_inline(out, b, theme)?,
         Body::Children(_) => render_children_of(out, b, theme)?,
         Body::None => {}
     }

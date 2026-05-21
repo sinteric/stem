@@ -40,7 +40,7 @@ pub(crate) fn render_cell(
         }
     }
     write!(out, "<{}{} style=\"{}\">", tag, attrs, style)?;
-    render_text_body_inline(out, b)?;
+    render_text_body_inline(out, b, theme)?;
     writeln!(out, "</{}>", tag)?;
     Ok(())
 }

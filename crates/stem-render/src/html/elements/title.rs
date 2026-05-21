@@ -12,9 +12,9 @@ pub const TITLE: HtmlElement = HtmlElement {
     render,
 };
 
-fn render(out: &mut String, b: &Block, _theme: &Theme) -> Result<(), std::fmt::Error> {
+fn render(out: &mut String, b: &Block, theme: &Theme) -> Result<(), std::fmt::Error> {
     write!(out, "<h1 class=\"stem-slide-title\">")?;
-    render_text_body_inline(out, b)?;
+    render_text_body_inline(out, b, theme)?;
     writeln!(out, "</h1>")?;
     Ok(())
 }

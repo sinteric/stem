@@ -168,6 +168,10 @@ fn render_sheet_cell(
         } else {
             raw_body.clone()
         }
+    } else if let (Some(fmt_kind), Ok(n)) = (fmt, raw_body.trim().parse::<f64>()) {
+        // Literal numeric cell — apply the same formatter formula cells
+        // use, so `cell[at:B2, fmt:currency](42000)` renders as $42,000.00.
+        formula::format_value(&formula::Value::Num(n), Some(fmt_kind))
     } else {
         raw_body.clone()
     };

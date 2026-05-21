@@ -12,13 +12,13 @@ pub const P: HtmlElement = HtmlElement {
     render,
 };
 
-fn render(out: &mut String, b: &Block, _theme: &Theme) -> Result<(), std::fmt::Error> {
+fn render(out: &mut String, b: &Block, theme: &Theme) -> Result<(), std::fmt::Error> {
     write!(out, "<p")?;
     if let Some(a) = b.prop_str("align") {
         write!(out, " style=\"text-align:{};\"", html_attr(a))?;
     }
     write!(out, ">")?;
-    render_text_body_inline(out, b)?;
+    render_text_body_inline(out, b, theme)?;
     writeln!(out, "</p>")?;
     Ok(())
 }

@@ -12,9 +12,8 @@ pub const TEXT: HtmlElement = HtmlElement {
     render,
 };
 
-fn render(out: &mut String, b: &Block, _theme: &Theme) -> Result<(), std::fmt::Error> {
+fn render(out: &mut String, b: &Block, theme: &Theme) -> Result<(), std::fmt::Error> {
     let mut style = String::new();
-    let theme = Theme::default();
     for p in &b.properties {
         match p.key.as_str() {
             "color" => {

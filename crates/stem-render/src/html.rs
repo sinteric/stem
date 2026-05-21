@@ -142,7 +142,7 @@ fn render_fallback_block(
     writeln!(out, "<div data-stem=\"{}\">", html_attr(&b.name))?;
     match &b.body {
         Body::None => {}
-        Body::Text(_) => render_text_body_inline(out, b)?,
+        Body::Text(_) => render_text_body_inline(out, b, theme)?,
         Body::Children(_) => render_children_of(out, b, theme)?,
     }
     writeln!(out, "</div>")?;
@@ -166,24 +166,28 @@ pub(crate) fn render_children_of(
     Ok(())
 }
 
-pub(crate) fn render_text_body_inline(out: &mut String, b: &Block) -> Result<(), std::fmt::Error> {
+pub(crate) fn render_text_body_inline(
+    out: &mut String,
+    b: &Block,
+    theme: &Theme,
+) -> Result<(), std::fmt::Error> {
     if let Body::Text(pieces) = &b.body {
         for p in pieces {
             match p {
                 TextPiece::Literal { text, .. } => write!(out, "{}", html_text(text))?,
-                TextPiece::Inline(inline) => render_inline(out, inline)?,
+                TextPiece::Inline(inline) => render_inline(out, inline, theme)?,
             }
         }
     }
     Ok(())
 }
 
-fn render_inline(out: &mut String, b: &Block) -> Result<(), std::fmt::Error> {
+fn render_inline(out: &mut String, b: &Block, theme: &Theme) -> Result<(), std::fmt::Error> {
     // Per-element dispatch: each inline owns its own render fn in
     // `elements::<name>`. Unknown inlines fall through to the generic
     // tagged-span wrapper, preserving previous behavior.
     if let Some(el) = elements::lookup_inline(&b.name) {
-        return (el.render)(out, b, &Theme::default());
+        return (el.render)(out, b, theme);
     }
     let mut text = String::new();
     for s in b.body_text_pieces() {

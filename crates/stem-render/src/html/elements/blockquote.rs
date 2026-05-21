@@ -12,13 +12,13 @@ pub const BLOCKQUOTE: HtmlElement = HtmlElement {
     render,
 };
 
-fn render(out: &mut String, b: &Block, _theme: &Theme) -> Result<(), std::fmt::Error> {
+fn render(out: &mut String, b: &Block, theme: &Theme) -> Result<(), std::fmt::Error> {
     write!(out, "<blockquote")?;
     if let Some(c) = b.prop_str("cite") {
         write!(out, " cite=\"{}\"", html_attr(c))?;
     }
     write!(out, ">")?;
-    render_text_body_inline(out, b)?;
+    render_text_body_inline(out, b, theme)?;
     writeln!(out, "</blockquote>")?;
     Ok(())
 }
