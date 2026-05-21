@@ -469,8 +469,8 @@ fn render_sheet(out: &mut String, b: &Block, theme: &Theme) -> Result<(), std::f
     }
 
     // Evaluate all formulas. The returned map has Num/Str/Error per cell.
-    let evaluated: std::collections::HashMap<(u32, u32), stem_parser::formula::Value> =
-        stem_parser::formula::evaluate_sheet::<fn(u32, u32) -> Option<String>>(&cell_bodies);
+    let evaluated: std::collections::HashMap<(u32, u32), crate::formula::Value> =
+        crate::formula::evaluate_sheet::<fn(u32, u32) -> Option<String>>(&cell_bodies);
 
     if max_col < 0 || max_row < 0 {
         writeln!(
@@ -535,7 +535,7 @@ fn render_sheet_cell(
     out: &mut String,
     cell: &Block,
     theme: &Theme,
-    evaluated: Option<&stem_parser::formula::Value>,
+    evaluated: Option<&crate::formula::Value>,
 ) -> Result<(), std::fmt::Error> {
     let mut style = String::from("border:1px solid #d0d7de;padding:0.15rem 0.4rem;");
     for p in &cell.properties {
@@ -563,8 +563,8 @@ fn render_sheet_cell(
     // Display: evaluated value formatted per fmt if available, otherwise raw body.
     let display = if let Some(value) = evaluated {
         // Use evaluated value for formulas and for plain numbers (so currency/percent applies).
-        if is_formula || matches!(value, stem_parser::formula::Value::Num(_)) {
-            stem_parser::formula::format_value(value, fmt)
+        if is_formula || matches!(value, crate::formula::Value::Num(_)) {
+            crate::formula::format_value(value, fmt)
         } else {
             raw_body.clone()
         }

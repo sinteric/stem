@@ -6,7 +6,6 @@ mod cook;
 mod cook_v2;
 mod csv;
 mod cursor;
-pub mod formula;
 mod parser;
 mod parser_v2;
 
