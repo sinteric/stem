@@ -1,6 +1,6 @@
-# Stem Schema (v2)
+# Stem Schema
 
-**Status:** draft. Sibling to `grammar-v2.md`. This document is the
+**Status:** draft. Sibling to `grammar.md`. This document is the
 source of truth for Stem's element vocabulary. The validator, LSP,
 renderer fallbacks, and AI prompts all derive from it.
 
@@ -708,7 +708,7 @@ element[name:transition]{
 ## 4. Sheet type
 
 Address-based — every value lives at a cell address. See
-`grammar-v2.md` §10 for cascade semantics and `fill`/`source`
+`grammar.md` §10 for cascade semantics and `fill`/`source`
 desugaring.
 
 ### `sheet`
@@ -932,7 +932,7 @@ A property not declared in the schema emits `type.unknown_property`
 
 ### Cell merge semantics (sheet only)
 
-See `grammar-v2.md` §10 "Cell merge semantics" — multiple `cell[at:X]`
+See `grammar.md` §10 "Cell merge semantics" — multiple `cell[at:X]`
 blocks at the same address merge properties; later body replaces
 earlier body if both supply one.
 
@@ -947,7 +947,7 @@ The counter is style-independent — formatted via the list's
 
 ## 6. Reserved for future
 
-Schema features deliberately out of scope for v2.0:
+Schema features deliberately out of scope for 1.0:
 
 - **Inheritance / mixins** — elements that "extend" other elements.
 - **Custom registries** — `[type:custom-id, registry:"./my.md"]` to

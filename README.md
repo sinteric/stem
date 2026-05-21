@@ -5,44 +5,51 @@ A small markup language designed to be **AI-friendly to generate**,
 formats without manual fix-up.
 
 ```stem
-[type:document, encoding:utf-8, locale:ko-KR, theme:corporate]
+[type:document, locale:ko-KR, title:"2026 Roadmap"]
 
-section(cover)(
-  # 2026 Product Roadmap
+section{
+  h1(2026 Product Roadmap)
+  h2(Strategy Team)
   date(2026.05.20)
-)
+}
 
-section(body)(
-  ## Background
+section{
+  h2(Background)
 
-  Existing document ecosystems are text(falling behind)[color:primary]
-  in the AI era. footnote(Gartner 2025 Report)
+  p(Existing document ecosystems are @text[color:primary](falling behind)
+  in the AI era. @footnote(Gartner 2025 Report))
 
-  layout(two-column)(
-    col(
-      ### Problems
-      - Format fragmentation
-      - Hard to generate with AI
-    )
-    col(
-      ### Opportunities
-      - Single source format
-      - AI-native design
-    )
-  )
+  layout[kind:two-column]{
+    col{
+      h3(Problems)
+      ol[style:1.]{
+        li(Format fragmentation)
+        li(Hard to generate with AI)
+      }
+    }
+    col{
+      h3(Opportunities)
+      ol[style:가.]{
+        li(Single source format)
+        li(AI-native design)
+      }
+    }
+  }
 
-  table[border:outer](
-    row(header)(
+  table[border:outer]{
+    row[kind:header]{
       cell(Phase)
-      cell(Timeline)[span:2]
-    )
-    row(
+      cell(Content)
+      cell[colspan:2](Timeline)
+    }
+    row{
       cell(Phase 1)
+      cell(Spec finalization)
       cell(2026 Q2)
-      cell(In Progress)[bg:yellow]
-    )
-  )
-)
+      cell[bg:yellow](In Progress)
+    }
+  }
+}
 ```
 
 ## Why
@@ -57,16 +64,16 @@ decides how that structure manifests in each output format.
 | Crate | Purpose |
 |-------|---------|
 | [`stem-core`](crates/stem-core) | AST, spans, diagnostics, theme types — no dependencies |
-| [`stem-parser`](crates/stem-parser) | Source → AST + diagnostics, with markdown-flavored cooking |
-| [`stem-types`](crates/stem-types) | Function & property registry; validator |
-| [`stem-render`](crates/stem-render) | Renderer trait + HTML (full) + docx/pdf (stubbed contracts) |
+| [`stem-parser`](crates/stem-parser) | Source → AST + diagnostics, cook pass for sheet desugaring/cascade |
+| [`stem-types`](crates/stem-types) | Element registry + validator (per-doc-type) |
+| [`stem-render`](crates/stem-render) | Renderer trait + HTML (full) + docx/pdf (stubs); spreadsheet formula engine |
 | [`stem-lsp`](crates/stem-lsp) | `tower-lsp` server: diagnostics, completion, hover, symbols, semantic tokens |
 | [`stem-cli`](crates/stem-cli) | `stem` binary — `parse` / `check` / `render` / `registry` |
 | [`stem-wasm`](crates/stem-wasm) | `wasm-bindgen` bindings powering the live web playground in `web/` |
 
 Detailed design lives in [`docs/grammar.md`](docs/grammar.md) (formal
-EBNF + content disambiguation rules) and
-[`docs/architecture.md`](docs/architecture.md).
+EBNF + content disambiguation rules), [`docs/schema.md`](docs/schema.md)
+(element vocabulary), and [`docs/architecture.md`](docs/architecture.md).
 
 ## Playground (live web preview)
 
@@ -81,7 +88,8 @@ live-preview playground:
 First run auto-installs the wasm32 target and `wasm-pack`. After that
 it's fast. Source on the left, sandboxed iframe preview on the right,
 diagnostics underneath — all updates on keystroke (50ms debounce).
-Source is auto-persisted to `localStorage`.
+Source is auto-persisted to `localStorage`. Double-click reset to load
+the sheet demo (formulas + cascade).
 
 ## CLI usage
 
@@ -106,11 +114,10 @@ trait; the docx and pdf renderers are currently stubs (return
 for `.stem` files. Capabilities:
 
 - Diagnostics (parser + validator, merged)
-- Completion (functions valid for the current document `type`, with
-  snippet insertion matching the function's arity)
-- Hover (function doc + property list)
-- Document symbols (outline of sections/slides/tables)
-- Semantic tokens (function names, property keys, string values)
+- Completion (elements valid for the current document `type`)
+- Hover (element doc + property list)
+- Document symbols (outline of sections, slides, sheets, tables)
+- Semantic tokens (block names, property keys, string values)
 
 ## Building
 
@@ -119,9 +126,8 @@ cargo build --workspace
 cargo test --workspace
 ```
 
-31 tests across parser, validator, and renderer cover the grammar's
-edge cases (chained args, escapes, balanced/nested parens, Unicode,
-unclosed-paren recovery) and HTML output correctness.
+124 tests cover the grammar's edge cases, schema validation, sheet
+desugaring/merging/cascading, formula evaluation, and HTML output.
 
 ## License
 

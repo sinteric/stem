@@ -1,166 +1,235 @@
-//! Walk the AST, validate against the registry, emit diagnostics.
+//! Validator. Walks a `Document` from `stem_core::ast`
+//! and emits diagnostics against a `Registry` from `schema`.
 
 use stem_core::ast::*;
 use stem_core::diagnostic::Diagnostic;
 use stem_core::theme::Theme;
 
-use crate::schema::{ArgArity, DocumentType, Registry, ValueKind};
+use crate::schema::{BodyKind, DocumentType, PropertyDef, Registry, ValueKind};
 
 pub fn validate(doc: &Document, registry: &Registry) -> Vec<Diagnostic> {
-    let mut out = Vec::new();
-
-    // Resolve the document type from metadata (defaults to Document).
     let doc_type = doc
         .metadata
         .get_str("type")
         .and_then(DocumentType::from_str)
         .unwrap_or(DocumentType::Document);
 
-    if let Some(type_str) = doc.metadata.get_str("type") {
-        if DocumentType::from_str(type_str).is_none() {
-            // Best-effort: span the metadata header itself.
+    let mut out = Vec::new();
+    if let Some(t) = doc.metadata.get_str("type") {
+        if DocumentType::from_str(t).is_none() {
             out.push(Diagnostic::warning(
                 "type.unknown_doc_type",
-                format!("unknown document type `{}`", type_str),
+                format!("unknown document type `{}`", t),
                 doc.metadata.span,
             ));
         }
     }
 
-    // Validate every top-level node.
-    for node in &doc.nodes {
-        if let Node::Call(c) = node {
-            validate_call(c, registry, doc_type, &mut out);
-        }
+    for block in &doc.blocks {
+        validate_block(block, registry, doc_type, &mut out);
     }
-
     out
 }
 
-fn validate_call(
-    call: &FunctionCall,
+fn validate_block(
+    block: &Block,
     registry: &Registry,
     doc_type: DocumentType,
     out: &mut Vec<Diagnostic>,
 ) {
-    let schema = match registry.get(&call.name) {
+    let schema = match registry.get(&block.name, doc_type) {
         Some(s) => s,
         None => {
-            out.push(Diagnostic::error(
-                "type.unknown_function",
-                format!("unknown function `{}`", call.name),
-                call.name_span,
-            ));
-            // Still validate children so other diagnostics surface.
-            for group in &call.args {
-                for c in group {
-                    if let Content::Call(child) = c {
-                        validate_call(child, registry, doc_type, out);
-                    }
-                }
+            // Element name might exist for a different doc type — emit a
+            // doc-type-aware diagnostic in that case.
+            if registry.has_any(&block.name) {
+                out.push(Diagnostic::error(
+                    "type.wrong_doc_type",
+                    format!(
+                        "`{}` is not valid in document type `{}`",
+                        block.name,
+                        doc_type.as_str()
+                    ),
+                    block.name_span,
+                ));
+            } else {
+                out.push(Diagnostic::warning(
+                    "type.unknown_function",
+                    format!("unknown element `{}`", block.name),
+                    block.name_span,
+                ));
             }
+            recurse(block, registry, doc_type, out);
             return;
         }
     };
 
-    // Document type filter.
-    if !schema.allowed_in.is_empty() && !schema.allowed_in.contains(&doc_type) {
-        let allowed: Vec<&str> = schema.allowed_in.iter().map(|t| t.as_str()).collect();
-        out.push(Diagnostic::error(
-            "type.wrong_doc_type",
-            format!(
-                "`{}` is not valid in document type `{}` (allowed in: {})",
-                call.name,
-                doc_type.as_str(),
-                allowed.join(", "),
-            ),
-            call.name_span,
-        ));
-    }
-
-    // Argument arity.
-    let n = call.args.len() as u8;
-    let arity_ok = match schema.arity {
-        ArgArity::Exact(want) => n == want,
-        ArgArity::Range(lo, hi) => n >= lo && n <= hi,
-        ArgArity::Any => true,
+    // Body kind match
+    let actual = match &block.body {
+        Body::None => BodyKind::None,
+        Body::Text(_) => BodyKind::Text,
+        Body::Children(_) => BodyKind::Children,
     };
-    if !arity_ok {
-        let want = match schema.arity {
-            ArgArity::Exact(w) => format!("exactly {} argument group(s)", w),
-            ArgArity::Range(lo, hi) => format!("between {} and {} argument group(s)", lo, hi),
-            ArgArity::Any => "any number of argument groups".to_string(),
+    if !schema.bodies.contains(&actual) {
+        let allowed: Vec<&str> = schema
+            .bodies
+            .iter()
+            .map(|b| match b {
+                BodyKind::None => "no body",
+                BodyKind::Text => "text body `(…)`",
+                BodyKind::Children => "block body `{…}`",
+            })
+            .collect();
+        let got = match actual {
+            BodyKind::None => "no body",
+            BodyKind::Text => "text body",
+            BodyKind::Children => "block body",
         };
-        out.push(Diagnostic::error(
-            "type.wrong_arity",
-            format!("`{}` expects {}, got {}", call.name, want, n),
-            call.span,
+        out.push(Diagnostic::warning(
+            "type.wrong_body_kind",
+            format!(
+                "`{}` expects {}, got {}",
+                block.name,
+                allowed.join(" or "),
+                got,
+            ),
+            block.span,
         ));
     }
 
-    // (No block/inline diagnostic here: the renderer's cook stage
-    // already lifts known block-preferred names to block-level, so a
-    // user-facing hint would be noise rather than signal.)
-
-    // Properties.
+    // Property validation
     let theme = Theme::default();
-    for prop in &call.properties {
-        let schema_prop = schema.properties.iter().find(|p| p.name == prop.key);
-        match schema_prop {
+    for prop in &block.properties {
+        match schema.properties.iter().find(|p| p.name == prop.key) {
             None => {
                 out.push(Diagnostic::warning(
                     "type.unknown_property",
-                    format!("unknown property `{}` on `{}`", prop.key, call.name),
+                    format!("unknown property `{}` on `{}`", prop.key, block.name),
                     prop.key_span,
                 ));
             }
-            Some(p) => {
-                let raw = prop.value.as_str();
-                let ok = match &p.kind {
-                    ValueKind::String => true,
-                    ValueKind::Integer => raw.parse::<i64>().is_ok(),
-                    ValueKind::Bool => prop.value.as_bool().is_some(),
-                    ValueKind::Enum(vals) => vals.contains(&raw),
-                    ValueKind::Color => theme.resolve_color(raw).is_some(),
-                };
-                if !ok {
-                    let want = match &p.kind {
-                        ValueKind::String => "a string".to_string(),
-                        ValueKind::Integer => "an integer".to_string(),
-                        ValueKind::Bool => "true/false".to_string(),
-                        ValueKind::Enum(vals) => format!("one of [{}]", vals.join(", ")),
-                        ValueKind::Color => "a theme color name or `#rrggbb`".to_string(),
-                    };
-                    out.push(Diagnostic::error(
-                        "type.bad_property_value",
-                        format!(
-                            "property `{}` on `{}` expected {}, got `{}`",
-                            prop.key, call.name, want, raw
-                        ),
-                        prop.value_span,
-                    ));
+            Some(def) => {
+                if let Some(diag) = check_value(def, prop, &theme) {
+                    out.push(diag);
                 }
             }
         }
     }
-
-    // Required props.
-    for p in schema.properties {
-        if p.required && !call.properties.iter().any(|pp| pp.key == p.name) {
+    for def in schema.properties {
+        if def.required && !block.properties.iter().any(|p| p.key == def.name) {
             out.push(Diagnostic::error(
                 "type.missing_property",
-                format!("required property `{}` missing on `{}`", p.name, call.name),
-                call.name_span,
+                format!("required property `{}` missing on `{}`", def.name, block.name),
+                block.name_span,
             ));
         }
     }
 
-    // Recurse into children.
-    for group in &call.args {
-        for c in group {
-            if let Content::Call(child) = c {
-                validate_call(child, registry, doc_type, out);
+    recurse(block, registry, doc_type, out);
+}
+
+fn recurse(
+    block: &Block,
+    registry: &Registry,
+    doc_type: DocumentType,
+    out: &mut Vec<Diagnostic>,
+) {
+    match &block.body {
+        Body::None => {}
+        Body::Children(kids) => {
+            for k in kids {
+                validate_block(k, registry, doc_type, out);
+            }
+        }
+        Body::Text(pieces) => {
+            for p in pieces {
+                if let TextPiece::Inline(inline) = p {
+                    validate_block(inline, registry, doc_type, out);
+                }
             }
         }
     }
+}
+
+fn check_value(def: &PropertyDef, prop: &Property, theme: &Theme) -> Option<Diagnostic> {
+    let raw = prop.value.as_str();
+    let ok = match &def.kind {
+        ValueKind::String => true,
+        ValueKind::Integer => raw.parse::<i64>().is_ok(),
+        ValueKind::Bool => prop.value.as_bool().is_some(),
+        ValueKind::Color => theme.resolve_color(raw).is_some(),
+        ValueKind::Length => is_length(raw),
+        ValueKind::Address => is_address(raw),
+        ValueKind::Style => true, // list-marker styles are a small open set; accept any string
+        ValueKind::Enum(vals) => vals.iter().any(|v| *v == raw),
+    };
+    if ok {
+        return None;
+    }
+    let want = match &def.kind {
+        ValueKind::String => "a string".to_string(),
+        ValueKind::Integer => "an integer".to_string(),
+        ValueKind::Bool => "true/false".to_string(),
+        ValueKind::Color => "a theme color name or `#rrggbb`".to_string(),
+        ValueKind::Length => "a length (e.g. 12pt, 60%, 100px, auto)".to_string(),
+        ValueKind::Address => "an address (A1, B, 5) or quoted range (\"B2:B4\")".to_string(),
+        ValueKind::Style => "a marker style".to_string(),
+        ValueKind::Enum(vals) => format!("one of [{}]", vals.join(", ")),
+    };
+    Some(Diagnostic::error(
+        "type.bad_property_value",
+        format!(
+            "property `{}` on the call expected {}, got `{}`",
+            prop.key, want, raw
+        ),
+        prop.value_span,
+    ))
+}
+
+fn is_length(s: &str) -> bool {
+    if s == "auto" {
+        return true;
+    }
+    // Accept N, N.M with optional unit: px, pt, em, rem, %, vw, vh
+    let units = ["px", "pt", "em", "rem", "%", "vw", "vh"];
+    if let Some(num) = units.iter().find_map(|u| s.strip_suffix(u)) {
+        return num.parse::<f64>().is_ok();
+    }
+    s.parse::<f64>().is_ok()
+}
+
+fn is_address(s: &str) -> bool {
+    // Single cell: letter(s) + digit(s) — e.g. A1, AB123
+    // Whole column: letter(s) — e.g. B, AA
+    // Whole row: digit(s) — e.g. 5, 123
+    // Range: anything with a `:` (must be quoted; the parser strips quotes by the time we see this)
+    if s.is_empty() {
+        return false;
+    }
+    if s.contains(':') {
+        // crude range validation: both sides look address-like
+        let parts: Vec<&str> = s.split(':').collect();
+        if parts.len() != 2 {
+            return false;
+        }
+        return is_simple_address(parts[0]) && is_simple_address(parts[1]);
+    }
+    is_simple_address(s)
+}
+
+fn is_simple_address(s: &str) -> bool {
+    if s.is_empty() {
+        return false;
+    }
+    let bytes = s.as_bytes();
+    let mut i = 0;
+    while i < bytes.len() && bytes[i].is_ascii_alphabetic() {
+        i += 1;
+    }
+    let letters = i;
+    while i < bytes.len() && bytes[i].is_ascii_digit() {
+        i += 1;
+    }
+    // entire string consumed, and at least one letter or one digit
+    i == bytes.len() && (letters > 0 || i > 0)
 }

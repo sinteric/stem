@@ -1,48 +1,16 @@
-//! Function and property registry, plus a validator that walks an AST
-//! and emits diagnostics for unknown functions, illegal placement, or
-//! bad property values.
+//! Function and property registry, plus a validator that walks a
+//! [`stem_core::ast::Document`] and emits diagnostics for unknown
+//! elements, illegal placement, or bad property values.
 //!
-//! The registry is per-document-type (`document`, `presentation`,
-//! `sheet`) and lives behind a small builder so applications can register
-//! their own.
-
-use std::collections::BTreeMap;
-
-use stem_core::ast::*;
-use stem_core::diagnostic::Diagnostic;
-use stem_core::span::Span;
+//! Hand-keyed today; the schema declarations in `docs/schema.md` are
+//! the human-facing source of truth and will eventually be machine-
+//! extracted into this registry.
 
 pub mod schema;
-pub mod schema_v2;
 pub mod validator;
-pub mod validator_v2;
 
 pub use schema::{
-    ArgArity, DocumentType, FunctionSchema, PropertySchema, Registry, ValueKind,
+    default_registry, BodyKind, Category, DocumentType, ElementSchema, PropertyDef, Registry,
+    ValueKind,
 };
 pub use validator::validate;
-
-pub use schema_v2::{default_registry as default_registry_v2, Registry as RegistryV2};
-pub use validator_v2::validate as validate_v2;
-
-/// Convenience: build the registry of the bundled document types
-/// (`document`, `presentation`, `sheet`).
-pub fn default_registry() -> Registry {
-    schema::default_registry()
-}
-
-/// Re-export for callers that want a one-call entry point.
-pub fn validate_document(doc: &Document) -> Vec<Diagnostic> {
-    validate(doc, &default_registry())
-}
-
-// trivial smoke test the consumer-facing surface compiles
-#[doc(hidden)]
-pub fn _smoke(_: BTreeMap<String, FunctionSchema>) -> Vec<Diagnostic> {
-    Vec::new()
-}
-
-// Ensure types we re-export are reachable.
-const _: fn() = || {
-    let _ = Span::default();
-};

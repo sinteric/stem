@@ -1,13 +1,18 @@
-//! AST for Stem documents.
+//! AST for Stem. See `docs/grammar.md` §11.
 //!
-//! Two layers:
-//! - Raw layer: `Node`, `FunctionCall`, `Content`, `Property` — what the
-//!   parser produces directly. Faithful to source.
-//! - Cooked layer: `Block`, `Inline`, `Paragraph`, `ListItem` — the result
-//!   of running the markdown-flavored second pass on raw content runs.
+
+
+//! playground toggle ships.
 //!
-//! Renderers consume the cooked layer. The validator and LSP work on the
-//! raw layer (so unknown functions still appear).
+//! Design notes:
+//! - One uniform `Block` type — no chained args, no `CallKind`.
+//! - Body is one of three explicit shapes: none, text, children.
+//! - Inline elements live inside `Body::Text` as `TextPiece::Inline`,
+//!   carrying a full `Block` (their `@`-prefix is consumed by the parser
+//!   and is not stored on the AST — that's a source-syntax detail).
+//! - Property values are either bare or quoted; both decode to a
+//!   `String`, with `Bare` vs `Quoted` preserved so the formatter can
+//!   round-trip the author's choice.
 
 use crate::span::Span;
 
@@ -15,11 +20,10 @@ use crate::span::Span;
 #[derive(Clone, Debug, Default, PartialEq, Eq)]
 pub struct Document {
     pub metadata: Metadata,
-    pub nodes: Vec<Node>,
+    pub blocks: Vec<Block>,
 }
 
-/// The `[type:..., ...]` header. Missing fields fall back to defaults at
-/// the validation layer, not here.
+/// The `[k:v, k:v]` header.
 #[derive(Clone, Debug, Default, PartialEq, Eq)]
 pub struct Metadata {
     pub span: Span,
@@ -34,12 +38,103 @@ impl Metadata {
             .map(|p| &p.value)
     }
 
-    pub fn get_str<'a>(&'a self, key: &str) -> Option<&'a str> {
+    pub fn get_str(&self, key: &str) -> Option<&str> {
         self.get(key).map(PropertyValue::as_str)
     }
 }
 
-/// A property key/value pair in a `[...]` list.
+/// The core uniform block. Every syntactic element in Stem is a `Block`.
+#[derive(Clone, Debug, PartialEq, Eq)]
+pub struct Block {
+    pub name: String,
+    pub name_span: Span,
+    pub properties: Vec<Property>,
+    pub body: Body,
+    /// Whether the source used the `@`-prefix form. Always false for
+    /// top-level/nested-block positions; always true when this block
+    /// was parsed in inline position (inside a text body). Renderers
+    /// and the formatter need this to round-trip source accurately.
+    pub inline_form: bool,
+    pub span: Span,
+}
+
+impl Block {
+    /// Convenience: return the text content if the body is `Text` and
+    /// contains only literals (no inline blocks).
+    pub fn plain_text(&self) -> Option<String> {
+        match &self.body {
+            Body::Text(pieces) => {
+                let mut s = String::new();
+                for p in pieces {
+                    match p {
+                        TextPiece::Literal { text, .. } => s.push_str(text),
+                        TextPiece::Inline(_) => return None,
+                    }
+                }
+                Some(s)
+            }
+            _ => None,
+        }
+    }
+
+    /// Convenience: lookup a property by key.
+    pub fn prop(&self, key: &str) -> Option<&PropertyValue> {
+        self.properties
+            .iter()
+            .find(|p| p.key == key)
+            .map(|p| &p.value)
+    }
+
+    pub fn prop_str(&self, key: &str) -> Option<&str> {
+        self.prop(key).map(PropertyValue::as_str)
+    }
+}
+
+/// What a block's body looks like in source.
+#[derive(Clone, Debug, PartialEq, Eq)]
+pub enum Body {
+    /// No body. The block is just `name` or `name[props]`.
+    None,
+    /// A text body `( … )` — either bare-form pieces or a single
+    /// quoted-string literal. The parser flattens both into a piece
+    /// list so consumers don't branch.
+    Text(Vec<TextPiece>),
+    /// A block body `{ … }` containing zero or more children blocks.
+    Children(Vec<Block>),
+}
+
+impl Body {
+    pub fn is_none(&self) -> bool {
+        matches!(self, Body::None)
+    }
+    pub fn is_text(&self) -> bool {
+        matches!(self, Body::Text(_))
+    }
+    pub fn is_children(&self) -> bool {
+        matches!(self, Body::Children(_))
+    }
+}
+
+/// One element of a text-body piece list.
+#[derive(Clone, Debug, PartialEq, Eq)]
+pub enum TextPiece {
+    Literal { text: String, span: Span },
+    /// An inline element. In source this is written as
+    /// `@ident[props](text)` etc., and the contained `Block` has
+    /// `inline_form: true`.
+    Inline(Block),
+}
+
+impl TextPiece {
+    pub fn span(&self) -> Span {
+        match self {
+            TextPiece::Literal { span, .. } => *span,
+            TextPiece::Inline(b) => b.span,
+        }
+    }
+}
+
+/// A key-value pair in a `[...]` properties block.
 #[derive(Clone, Debug, PartialEq, Eq)]
 pub struct Property {
     pub key: String,
@@ -48,19 +143,19 @@ pub struct Property {
     pub value_span: Span,
 }
 
+/// A property's value. The two variants preserve the author's
+/// bare/quoted choice so the formatter can round-trip it; both decode
+/// to the same `String` payload.
 #[derive(Clone, Debug, PartialEq, Eq)]
 pub enum PropertyValue {
-    /// A bare token like `red`, `2`, or `corporate`. Type-coerced at the
-    /// validator depending on the function's schema.
     Bare(String),
-    /// A `"quoted string"` literal.
-    String(String),
+    Quoted(String),
 }
 
 impl PropertyValue {
     pub fn as_str(&self) -> &str {
         match self {
-            PropertyValue::Bare(s) | PropertyValue::String(s) => s,
+            PropertyValue::Bare(s) | PropertyValue::Quoted(s) => s,
         }
     }
 
@@ -75,166 +170,91 @@ impl PropertyValue {
             _ => None,
         }
     }
-}
 
-/// A top-level node — either a function call or a stretch of raw text
-/// (which the second pass cooks into paragraphs, headings, lists).
-#[derive(Clone, Debug, PartialEq, Eq)]
-pub enum Node {
-    Call(FunctionCall),
-    Text(TextRun),
-}
-
-impl Node {
-    pub fn span(&self) -> Span {
-        match self {
-            Node::Call(c) => c.span,
-            Node::Text(t) => t.span,
-        }
+    /// Returns true if the original source used quoted form.
+    pub fn was_quoted(&self) -> bool {
+        matches!(self, PropertyValue::Quoted(_))
     }
 }
 
-/// A `name(arg)(arg)...[props]` call, as parsed.
-///
-/// Each `(...)` is one *argument group*. Most calls have a single group
-/// (`cell(value)`); some take two (`section(cover)(body...)`) where the
-/// first acts as a tag/id and the last is the body. The validator and
-/// renderer decide the per-function meaning. Use `body()` for the
-/// renderer-friendly view.
-///
-/// `kind` is `Block` if *any* argument group contains a literal newline
-/// at depth zero (outside nested calls), otherwise `Inline`.
-#[derive(Clone, Debug, PartialEq, Eq)]
-pub struct FunctionCall {
-    pub name: String,
-    pub name_span: Span,
-    pub kind: CallKind,
-    pub args: Vec<Vec<Content>>,
-    pub properties: Vec<Property>,
-    pub span: Span,
-}
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use crate::span::Pos;
 
-impl FunctionCall {
-    /// The most relevant content for a renderer: the last argument
-    /// group, which is the body for chained calls and the only content
-    /// for single-group calls. Empty slice if there are no arg groups.
-    pub fn body(&self) -> &[Content] {
-        self.args.last().map(|v| v.as_slice()).unwrap_or(&[])
+    fn span(line: u32, col: u32) -> Span {
+        Span::new(Pos::new(0, line, col), Pos::new(0, line, col))
     }
 
-    /// The leading "header" arg, present only on chained calls like
-    /// `section(cover)(body)`. None for single-group calls.
-    pub fn header(&self) -> Option<&[Content]> {
-        if self.args.len() <= 1 {
-            None
-        } else {
-            self.args.first().map(|v| v.as_slice())
-        }
+    #[test]
+    fn block_no_body_constructs() {
+        let b = Block {
+            name: "pagebreak".into(),
+            name_span: span(1, 1),
+            properties: Vec::new(),
+            body: Body::None,
+            inline_form: false,
+            span: span(1, 1),
+        };
+        assert!(b.body.is_none());
+        assert!(b.plain_text().is_none());
     }
-}
 
-#[derive(Clone, Copy, Debug, PartialEq, Eq, Hash)]
-pub enum CallKind {
-    Block,
-    Inline,
-}
-
-/// One element of a function's content list: either a literal text run
-/// or a nested call.
-#[derive(Clone, Debug, PartialEq, Eq)]
-pub enum Content {
-    Text(TextRun),
-    Call(FunctionCall),
-}
-
-impl Content {
-    pub fn span(&self) -> Span {
-        match self {
-            Content::Text(t) => t.span,
-            Content::Call(c) => c.span,
-        }
+    #[test]
+    fn block_text_body_plain_text() {
+        let b = Block {
+            name: "p".into(),
+            name_span: span(1, 1),
+            properties: Vec::new(),
+            body: Body::Text(vec![TextPiece::Literal {
+                text: "hello".into(),
+                span: span(1, 3),
+            }]),
+            inline_form: false,
+            span: span(1, 1),
+        };
+        assert_eq!(b.plain_text().as_deref(), Some("hello"));
     }
-}
 
-#[derive(Clone, Debug, PartialEq, Eq)]
-pub struct TextRun {
-    pub text: String,
-    pub span: Span,
-}
+    #[test]
+    fn block_text_body_with_inline_no_plain_text() {
+        let inline_block = Block {
+            name: "text".into(),
+            name_span: span(1, 10),
+            properties: Vec::new(),
+            body: Body::Text(vec![TextPiece::Literal {
+                text: "red".into(),
+                span: span(1, 15),
+            }]),
+            inline_form: true,
+            span: span(1, 10),
+        };
+        let outer = Block {
+            name: "p".into(),
+            name_span: span(1, 1),
+            properties: Vec::new(),
+            body: Body::Text(vec![
+                TextPiece::Literal {
+                    text: "the ".into(),
+                    span: span(1, 3),
+                },
+                TextPiece::Inline(inline_block),
+            ]),
+            inline_form: false,
+            span: span(1, 1),
+        };
+        assert!(outer.plain_text().is_none());
+    }
 
-// =============== Cooked layer (markdown second pass) ===============
-//
-// The cooked layer is constructed lazily by `stem_parser::cook` (or by
-// renderers as needed). It is *not* what the parser emits.
+    #[test]
+    fn property_value_coercions() {
+        let v = PropertyValue::Bare("42".into());
+        assert_eq!(v.as_str(), "42");
+        assert_eq!(v.as_i64(), Some(42));
+        assert_eq!(v.as_bool(), None);
 
-/// A block-level cooked element produced by the markdown pass over a
-/// stretch of raw text. Lives alongside `Content::Call` in the cooked
-/// content list.
-#[derive(Clone, Debug, PartialEq, Eq)]
-pub enum Block {
-    Heading {
-        level: u8,
-        runs: Vec<Inline>,
-        span: Span,
-    },
-    Paragraph(Paragraph),
-    List {
-        kind: ListKind,
-        items: Vec<ListItem>,
-        span: Span,
-    },
-    /// A function call that the second pass surfaced as a block (because
-    /// its raw form is a `Block`-kind call).
-    Call(FunctionCall),
-}
-
-#[derive(Clone, Debug, PartialEq, Eq)]
-pub struct Paragraph {
-    pub runs: Vec<Inline>,
-    pub span: Span,
-}
-
-#[derive(Clone, Copy, Debug, PartialEq, Eq, Hash)]
-pub enum ListKind {
-    Unordered,
-    Ordered,
-}
-
-#[derive(Clone, Debug, PartialEq, Eq)]
-pub struct ListItem {
-    pub runs: Vec<Inline>,
-    pub span: Span,
-}
-
-#[derive(Clone, Debug, PartialEq, Eq)]
-pub enum Inline {
-    Text {
-        text: String,
-        style: TextStyle,
-        span: Span,
-    },
-    Call(FunctionCall),
-}
-
-#[derive(Clone, Copy, Debug, Default, PartialEq, Eq, Hash)]
-pub struct TextStyle {
-    pub bold: bool,
-    pub italic: bool,
-    pub code: bool,
-}
-
-#[derive(Clone, Debug, PartialEq, Eq)]
-pub struct MarkdownLine {
-    pub kind: LineKind,
-    pub raw: String,
-    pub span: Span,
-}
-
-#[derive(Clone, Copy, Debug, PartialEq, Eq, Hash)]
-pub enum LineKind {
-    Blank,
-    Heading(u8),
-    Bullet,
-    Ordered,
-    Paragraph,
+        let v = PropertyValue::Quoted("yes".into());
+        assert_eq!(v.as_bool(), Some(true));
+        assert!(v.was_quoted());
+    }
 }

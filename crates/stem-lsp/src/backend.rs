@@ -1,6 +1,5 @@
-//! LSP backend implementation. Holds open documents in a `DashMap` and
-//! re-parses on every change (Stem is small; incremental parsing is not
-//! needed yet).
+//! LSP backend. Holds open documents in a `DashMap` and re-parses on
+//! every change (Stem is small; incremental parsing is not needed yet).
 
 use dashmap::DashMap;
 use tower_lsp::jsonrpc::Result as LspResult;
@@ -9,7 +8,7 @@ use tower_lsp::{Client, LanguageServer};
 
 use stem_core::ast::*;
 use stem_parser::parse;
-use stem_types::{default_registry, validate, DocumentType, Registry};
+use stem_types::{default_registry, validate, DocumentType, ElementSchema, Registry};
 
 use crate::conv::{pos_to_lsp, severity_to_lsp, span_to_range};
 
@@ -20,7 +19,7 @@ pub struct Backend {
 }
 
 #[derive(Clone)]
-#[allow(dead_code)] // text + diagnostics retained for future LSP features (code lens, etc.)
+#[allow(dead_code)] // text + diagnostics retained for future LSP features
 pub struct DocState {
     pub text: String,
     pub doc: Document,
@@ -101,6 +100,7 @@ impl LanguageServer for Backend {
                         "[".into(),
                         ",".into(),
                         ":".into(),
+                        "@".into(),
                     ]),
                     resolve_provider: Some(false),
                     ..Default::default()
@@ -142,8 +142,6 @@ impl LanguageServer for Backend {
     }
 
     async fn did_change(&self, mut params: DidChangeTextDocumentParams) {
-        // Full sync: we requested SyncKind::FULL, so changes is a single
-        // entry with the full text.
         if let Some(change) = params.content_changes.pop() {
             self.analyze_and_publish(
                 params.text_document.uri,
@@ -167,19 +165,16 @@ impl LanguageServer for Backend {
 
         let mut items = Vec::new();
         for name in self.registry.names_for(state.doc_type) {
-            let schema = self
-                .registry
-                .get(name)
-                .expect("name returned by registry should be retrievable");
-            let snippet = build_snippet(schema);
-            items.push(CompletionItem {
-                label: name.to_string(),
-                kind: Some(CompletionItemKind::FUNCTION),
-                detail: Some(schema.doc.to_string()),
-                insert_text: Some(snippet),
-                insert_text_format: Some(InsertTextFormat::SNIPPET),
-                ..Default::default()
-            });
+            if let Some(schema) = self.registry.get(name, state.doc_type) {
+                items.push(CompletionItem {
+                    label: name.to_string(),
+                    kind: Some(CompletionItemKind::FUNCTION),
+                    detail: Some(schema.doc.to_string()),
+                    insert_text: Some(build_snippet(schema)),
+                    insert_text_format: Some(InsertTextFormat::SNIPPET),
+                    ..Default::default()
+                });
+            }
         }
         Ok(Some(CompletionResponse::Array(items)))
     }
@@ -196,10 +191,9 @@ impl LanguageServer for Backend {
             None => return Ok(None),
         };
 
-        // Find the call whose name_span covers the requested position.
         let needle = (lsp_pos.line, lsp_pos.character);
-        if let Some(call) = find_call_at(&state.doc.nodes, needle) {
-            if let Some(schema) = self.registry.get(&call.name) {
+        if let Some(block) = find_block_at(&state.doc.blocks, needle) {
+            if let Some(schema) = self.registry.get(&block.name, state.doc_type) {
                 let mut md = String::new();
                 md.push_str(&format!("**`{}`**\n\n", schema.name));
                 md.push_str(schema.doc);
@@ -219,7 +213,7 @@ impl LanguageServer for Backend {
                         kind: MarkupKind::Markdown,
                         value: md,
                     }),
-                    range: Some(span_to_range(call.name_span)),
+                    range: Some(span_to_range(block.name_span)),
                 }));
             }
         }
@@ -236,7 +230,7 @@ impl LanguageServer for Backend {
         };
 
         let mut out = Vec::new();
-        collect_symbols(&state.doc.nodes, &mut out);
+        collect_symbols(&state.doc.blocks, &mut out);
         Ok(Some(DocumentSymbolResponse::Nested(out)))
     }
 
@@ -249,22 +243,20 @@ impl LanguageServer for Backend {
             None => return Ok(None),
         };
 
-        // Collect (line, char, length, type_index) from name spans and property keys.
         let mut tokens = Vec::new();
-        // metadata properties
         for p in &state.doc.metadata.properties {
             tokens.push((p.key_span, 1u32));
         }
-        collect_token_spans(&state.doc.nodes, &mut tokens);
-        // Sort by (line, char)
+        for block in &state.doc.blocks {
+            collect_token_spans(block, &mut tokens);
+        }
         tokens.sort_by(|a, b| {
             let pa = pos_to_lsp(a.0.start);
             let pb = pos_to_lsp(b.0.start);
             (pa.line, pa.character).cmp(&(pb.line, pb.character))
         });
 
-        // LSP semantic tokens are delta-encoded.
-        let mut data = Vec::with_capacity(tokens.len() * 5);
+        let mut data = Vec::with_capacity(tokens.len());
         let mut prev_line = 0u32;
         let mut prev_char = 0u32;
         for (span, ty) in tokens {
@@ -273,7 +265,6 @@ impl LanguageServer for Backend {
             let length = if end.line == start.line {
                 end.character.saturating_sub(start.character)
             } else {
-                // multi-line tokens — clamp; LSP requires single-line tokens.
                 continue;
             };
             if length == 0 {
@@ -307,52 +298,53 @@ impl LanguageServer for Backend {
     }
 }
 
-fn build_snippet(schema: &stem_types::FunctionSchema) -> String {
-    // Build a snippet matching the function's expected arity.
-    use stem_types::ArgArity;
-    let n = match schema.arity {
-        ArgArity::Exact(n) => n,
-        ArgArity::Range(lo, _) => lo,
-        ArgArity::Any => 1,
-    };
+// ---------------------------------------------------------------
+// AST walkers — adapted to the canonical Block/Body/TextPiece shape
+// ---------------------------------------------------------------
+
+fn build_snippet(schema: &ElementSchema) -> String {
+    // Insert: name + first body shape the schema declares (text/block/none)
+    use stem_types::BodyKind;
     let mut s = schema.name.to_string();
-    for i in 0..n {
-        let hint = schema.arg_hints.get(i as usize).copied().unwrap_or("");
-        s.push('(');
-        s.push_str(&format!("${{{}:{}}}", i + 1, hint));
-        s.push(')');
+    // Prefer a text body if both are allowed
+    if schema.bodies.contains(&BodyKind::Text) {
+        s.push_str("(${1:content})");
+    } else if schema.bodies.contains(&BodyKind::Children) {
+        s.push_str("{\n  $0\n}");
     }
     s
 }
 
-fn find_call_at(nodes: &[Node], pos: (u32, u32)) -> Option<&FunctionCall> {
-    for n in nodes {
-        if let Node::Call(c) = n {
-            if span_contains(c.name_span, pos) {
-                return Some(c);
-            }
-            if let Some(inner) = find_call_in(c, pos) {
-                return Some(inner);
-            }
+fn find_block_at(blocks: &[Block], pos: (u32, u32)) -> Option<&Block> {
+    for b in blocks {
+        if span_contains(b.name_span, pos) {
+            return Some(b);
+        }
+        if let Some(inner) = find_block_in(b, pos) {
+            return Some(inner);
         }
     }
     None
 }
 
-fn find_call_in(call: &FunctionCall, pos: (u32, u32)) -> Option<&FunctionCall> {
-    for group in &call.args {
-        for c in group {
-            if let Content::Call(child) = c {
-                if span_contains(child.name_span, pos) {
-                    return Some(child);
-                }
-                if let Some(inner) = find_call_in(child, pos) {
-                    return Some(inner);
+fn find_block_in(block: &Block, pos: (u32, u32)) -> Option<&Block> {
+    match &block.body {
+        Body::Children(kids) => find_block_at(kids, pos),
+        Body::Text(pieces) => {
+            for p in pieces {
+                if let TextPiece::Inline(inline) = p {
+                    if span_contains(inline.name_span, pos) {
+                        return Some(inline);
+                    }
+                    if let Some(inner) = find_block_in(inline, pos) {
+                        return Some(inner);
+                    }
                 }
             }
+            None
         }
+        Body::None => None,
     }
-    None
 }
 
 fn span_contains(span: stem_core::Span, pos: (u32, u32)) -> bool {
@@ -371,96 +363,79 @@ fn span_contains(span: stem_core::Span, pos: (u32, u32)) -> bool {
     true
 }
 
-fn collect_symbols(nodes: &[Node], out: &mut Vec<DocumentSymbol>) {
-    for n in nodes {
-        if let Node::Call(c) = n {
-            #[allow(deprecated)]
-            let mut sym = DocumentSymbol {
-                name: c.name.clone(),
-                detail: detail_for(c),
-                kind: kind_for(&c.name),
-                tags: None,
-                deprecated: None,
-                range: span_to_range(c.span),
-                selection_range: span_to_range(c.name_span),
-                children: Some(Vec::new()),
-            };
-            collect_symbols_in(c, sym.children.as_mut().unwrap());
-            out.push(sym);
+fn collect_symbols(blocks: &[Block], out: &mut Vec<DocumentSymbol>) {
+    for b in blocks {
+        #[allow(deprecated)]
+        let mut sym = DocumentSymbol {
+            name: b.name.clone(),
+            detail: detail_for(b),
+            kind: kind_for(&b.name),
+            tags: None,
+            deprecated: None,
+            range: span_to_range(b.span),
+            selection_range: span_to_range(b.name_span),
+            children: Some(Vec::new()),
+        };
+        match &b.body {
+            Body::Children(kids) => collect_symbols(kids, sym.children.as_mut().unwrap()),
+            Body::Text(pieces) => {
+                for p in pieces {
+                    if let TextPiece::Inline(inline) = p {
+                        collect_symbols(std::slice::from_ref(inline), sym.children.as_mut().unwrap());
+                    }
+                }
+            }
+            Body::None => {}
         }
+        out.push(sym);
     }
 }
 
-fn collect_symbols_in(call: &FunctionCall, out: &mut Vec<DocumentSymbol>) {
-    for group in &call.args {
-        for c in group {
-            if let Content::Call(child) = c {
-                #[allow(deprecated)]
-                let mut sym = DocumentSymbol {
-                    name: child.name.clone(),
-                    detail: detail_for(child),
-                    kind: kind_for(&child.name),
-                    tags: None,
-                    deprecated: None,
-                    range: span_to_range(child.span),
-                    selection_range: span_to_range(child.name_span),
-                    children: Some(Vec::new()),
-                };
-                collect_symbols_in(child, sym.children.as_mut().unwrap());
-                out.push(sym);
-            }
-        }
+fn detail_for(b: &Block) -> Option<String> {
+    // For sheet-style cells, surface the address; for sections, the id.
+    if let Some(id) = b.prop_str("id") {
+        return Some(format!("[id:{}]", id));
     }
-}
-
-fn detail_for(c: &FunctionCall) -> Option<String> {
-    let head = c.header().and_then(|grp| {
-        let mut s = String::new();
-        for ct in grp {
-            if let Content::Text(t) = ct {
-                s.push_str(t.text.trim());
-            }
-        }
-        if s.is_empty() {
-            None
-        } else {
-            Some(s)
-        }
-    });
-    head
+    if let Some(at) = b.prop_str("at") {
+        return Some(format!("[at:{}]", at));
+    }
+    b.plain_text().filter(|s| !s.trim().is_empty()).map(|s| {
+        let s = s.trim();
+        if s.len() > 40 { format!("{}…", &s[..40]) } else { s.to_string() }
+    })
 }
 
 fn kind_for(name: &str) -> SymbolKind {
     match name {
         "section" | "slide" => SymbolKind::CLASS,
         "layout" | "col" => SymbolKind::NAMESPACE,
-        "table" | "row" | "cell" => SymbolKind::STRUCT,
+        "table" | "row" | "cell" | "sheet" => SymbolKind::STRUCT,
         "footnote" | "note" | "speaker-note" => SymbolKind::STRING,
         _ => SymbolKind::FUNCTION,
     }
 }
 
-fn collect_token_spans(nodes: &[Node], out: &mut Vec<(stem_core::Span, u32)>) {
-    for n in nodes {
-        if let Node::Call(c) = n {
-            collect_token_spans_in_call(c, out);
-        }
-    }
-}
-
-fn collect_token_spans_in_call(call: &FunctionCall, out: &mut Vec<(stem_core::Span, u32)>) {
-    out.push((call.name_span, 0)); // FUNCTION
-    for p in &call.properties {
+fn collect_token_spans(block: &Block, out: &mut Vec<(stem_core::Span, u32)>) {
+    out.push((block.name_span, 0)); // FUNCTION
+    for p in &block.properties {
         out.push((p.key_span, 1)); // PROPERTY
-        if let stem_core::ast::PropertyValue::String(_) = p.value {
+        if let stem_core::ast::PropertyValue::Quoted(_) = p.value {
             out.push((p.value_span, 2)); // STRING
         }
     }
-    for group in &call.args {
-        for c in group {
-            if let Content::Call(child) = c {
-                collect_token_spans_in_call(child, out);
+    match &block.body {
+        Body::Children(kids) => {
+            for k in kids {
+                collect_token_spans(k, out);
             }
         }
+        Body::Text(pieces) => {
+            for p in pieces {
+                if let TextPiece::Inline(inline) = p {
+                    collect_token_spans(inline, out);
+                }
+            }
+        }
+        Body::None => {}
     }
 }

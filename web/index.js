@@ -1,44 +1,13 @@
 // Stem playground entry point. Loads the WASM module, wires the
-// textarea + grammar selector to a debounced re-render, and updates
-// the preview iframe + diagnostics list.
+// textarea to a debounced re-render, and updates the preview iframe +
+// diagnostics list.
 
-import init, { render, render_v2 } from './pkg/stem_wasm.js';
+import init, { render } from './pkg/stem_wasm.js';
 
-const DEFAULTS = {
-  v1: `[type:document, title:"Playground"]
-
-section(welcome)(
-  # Welcome to Stem (v1 legacy)
-
-  Edit on the left → see the render on the right.
-
-  layout(two-column)(
-    col(
-      ### Try
-
-      - Add a heading with text(red)[color:red] inline styling
-      - Wrap a quote across two lines
-      - Introduce a typo to see diagnostics
-    )
-    col(
-      ### Notice
-
-      Block-level functions like layout, col, table appear as blocks
-      even when their bodies are short. Inline functions like text
-      and footnote stay inline.
-    )
-  )
-)
-
-section(closing)(
-  # Thanks
-  note(Switch the grammar dropdown to v2 to try the new syntax.)
-)
-`,
-  v2: `[type:document, title:"Playground"]
+const DEFAULT_SRC = `[type:document, title:"Playground"]
 
 section{
-  h1(Welcome to Stem v2)
+  h1(Welcome to Stem)
   p(Edit on the left → see the render on the right.)
   p(Inline styling: @text[color:primary](critical) text, a
     @footnote(see appendix) for references, or @date(2026.05.20) dates.)
@@ -91,8 +60,7 @@ section{
   p(Try removing a closing brace, or writing
     @bogus[foo:bar](thing) — diagnostics appear below.)
 }
-`,
-};
+`;
 
 const SHEET_DEMO = `[type:sheet, name:"Q4 Demo"]
 
@@ -121,11 +89,7 @@ sheet[id:q4]{
 }
 `;
 
-const STORAGE_KEY_BY_GRAMMAR = {
-  v1: 'stem-playground.src.v1',
-  v2: 'stem-playground.src.v2',
-};
-const GRAMMAR_KEY = 'stem-playground.grammar';
+const STORAGE_KEY = 'stem-playground.src';
 
 async function main() {
   await init();
@@ -136,39 +100,20 @@ async function main() {
   const stats = document.getElementById('stats');
   const reset = document.getElementById('reset');
   const copy = document.getElementById('copy');
-  const grammarSel = document.getElementById('grammar');
 
-  // Pick saved grammar or default to v2
-  const savedGrammar = localStorage.getItem(GRAMMAR_KEY);
-  if (savedGrammar === 'v1' || savedGrammar === 'v2') {
-    grammarSel.value = savedGrammar;
-  } else {
-    grammarSel.value = 'v2';
-  }
-
-  function loadSourceForCurrentGrammar() {
-    const g = grammarSel.value;
-    const saved = localStorage.getItem(STORAGE_KEY_BY_GRAMMAR[g]);
-    src.value = saved ?? DEFAULTS[g];
-  }
-
-  loadSourceForCurrentGrammar();
+  src.value = localStorage.getItem(STORAGE_KEY) ?? DEFAULT_SRC;
 
   let timer;
   let lastHtml = '';
 
-  function callRender(text) {
-    return grammarSel.value === 'v2' ? render_v2(text) : render(text);
-  }
-
   function rerender() {
-    const result = callRender(src.value);
+    const result = render(src.value);
     lastHtml = result.html;
     preview.srcdoc = wrapHtml(result.html);
     renderDiags(diags, result.diagnostics);
     renderStats(stats, result.stats);
     try {
-      localStorage.setItem(STORAGE_KEY_BY_GRAMMAR[grammarSel.value], src.value);
+      localStorage.setItem(STORAGE_KEY, src.value);
     } catch {
       // private window or quota — silently skip
     }
@@ -179,22 +124,14 @@ async function main() {
     timer = setTimeout(rerender, 50);
   });
 
-  grammarSel.addEventListener('change', () => {
-    localStorage.setItem(GRAMMAR_KEY, grammarSel.value);
-    loadSourceForCurrentGrammar();
-    rerender();
-  });
-
   reset.addEventListener('click', () => {
-    // Cycle reset: first click → default doc; second click (within ~1s)
-    // → sheet demo so users can try the spreadsheet view.
-    const g = grammarSel.value;
+    // Double-click reset within 1.5s loads the sheet demo
     const now = Date.now();
-    if (g === 'v2' && reset.dataset.lastReset && now - +reset.dataset.lastReset < 1500) {
+    if (reset.dataset.lastReset && now - +reset.dataset.lastReset < 1500) {
       src.value = SHEET_DEMO;
       reset.dataset.lastReset = '';
     } else {
-      src.value = DEFAULTS[g];
+      src.value = DEFAULT_SRC;
       reset.dataset.lastReset = String(now);
     }
     rerender();

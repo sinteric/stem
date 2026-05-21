@@ -173,8 +173,9 @@ fn run_registry() -> ExitCode {
     ] {
         println!("# {}", ty.as_str());
         for name in r.names_for(ty) {
-            let s = r.get(name).unwrap();
-            println!("  {:16}  {}", s.name, s.doc);
+            if let Some(s) = r.get(name, ty) {
+                println!("  {:16}  {}", s.name, s.doc);
+            }
         }
         println!();
     }
