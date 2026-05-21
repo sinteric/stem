@@ -5,18 +5,19 @@ use stem_core::ast::*;
 use stem_core::diagnostic::Diagnostic;
 use stem_core::theme::Theme;
 
+use crate::element::DocTypeRef;
+use crate::elements;
 use crate::schema::{BodyKind, DocumentType, PropertyDef, Registry, ValueKind};
 
 pub fn validate(doc: &Document, registry: &Registry) -> Vec<Diagnostic> {
-    let doc_type = doc
-        .metadata
-        .get_str("type")
-        .and_then(DocumentType::from_str)
+    let raw_type = doc.metadata.get_str("type");
+    let doc_type = raw_type
+        .and_then(|s| registry.resolve_doc_type(s))
         .unwrap_or(DocumentType::Document);
 
     let mut out = Vec::new();
-    if let Some(t) = doc.metadata.get_str("type") {
-        if DocumentType::from_str(t).is_none() {
+    if let Some(t) = raw_type {
+        if registry.resolve_doc_type(t).is_none() {
             out.push(Diagnostic::warning(
                 "type.unknown_doc_type",
                 format!("unknown document type `{}`", t),
@@ -122,6 +123,18 @@ fn validate_block(
                 format!("required property `{}` missing on `{}`", def.name, block.name),
                 block.name_span,
             ));
+        }
+    }
+
+    // Run any per-element semantic validators registered via the
+    // per-element layout. Schema-level checks above are universal;
+    // these hooks add element-specific rules (e.g. formula syntax).
+    let dt_ref = DocTypeRef::new(doc_type);
+    for def in elements::ALL {
+        if def.schema.name == block.name {
+            if let Some(validate) = def.validate {
+                out.extend(validate(block, &dt_ref));
+            }
         }
     }
 

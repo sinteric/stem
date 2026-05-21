@@ -7,8 +7,8 @@
 //! them to think in terms of *layout intent* rather than source syntax.
 
 pub mod docx;
-pub mod formula;
 pub mod html;
+pub mod math;
 pub mod pdf;
 
 pub use docx::DocxRenderer;

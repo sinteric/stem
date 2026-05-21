@@ -217,3 +217,40 @@ section{ h1(Hello) p(World.) }"#);
     assert!(html.contains("<title>제목</title>"));
     assert!(html.contains("<h1>Hello</h1>"));
 }
+
+#[test]
+fn math_latex_renders_mathml() {
+    let html = render(r#"p(simple: @math("a^2 + b^2"))"#);
+    assert!(html.contains("<math"), "expected <math> tag, got: {}", html);
+    assert!(
+        html.contains("msup") || html.contains("a") && html.contains("2"),
+        "expected MathML structure, got: {}",
+        html
+    );
+}
+
+#[test]
+fn math_block_display_uses_block_class() {
+    let html = render(r#"p(@math[display:block]("x + y"))"#);
+    assert!(
+        html.contains("stem-math block"),
+        "expected block class, got: {}",
+        html
+    );
+}
+
+#[test]
+fn math_mathml_notation_passes_through() {
+    let html = render(r#"p(@math[notation:mathml]("<mi>x</mi>"))"#);
+    assert!(html.contains("<mi>x</mi>"), "got: {}", html);
+}
+
+#[test]
+fn math_unsupported_notation_emits_error_span() {
+    let html = render(r#"p(@math[notation:asciimath]("a/b"))"#);
+    assert!(
+        html.contains("stem-math-error"),
+        "expected error span for unsupported notation, got: {}",
+        html
+    );
+}

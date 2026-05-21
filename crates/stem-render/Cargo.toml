@@ -8,4 +8,6 @@ description = "Render Stem documents to output formats (HTML, docx, pdf)"
 [dependencies]
 stem-core = { workspace = true }
 stem-parser = { workspace = true }
+stem-types = { workspace = true }
 thiserror = { workspace = true }
+pulldown-latex = "0.7.1"

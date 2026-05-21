@@ -13,12 +13,20 @@ pub const MATH: ElementDef = ElementDef {
         bodies: &[BodyKind::Text],
         parents: &["any-text-body", "any-block-container"],
         children: &[],
-        properties: &[PropertyDef {
-            name: "display",
-            kind: ValueKind::Enum(&["inline", "block"]),
-            required: false,
-            doc: "Render style",
-        }],
+        properties: &[
+            PropertyDef {
+                name: "notation",
+                kind: ValueKind::Enum(&["latex", "asciimath", "mathml"]),
+                required: false,
+                doc: "Notation system (default: latex)",
+            },
+            PropertyDef {
+                name: "display",
+                kind: ValueKind::Enum(&["inline", "block"]),
+                required: false,
+                doc: "Render style",
+            },
+        ],
         doc: "Inline or block math expression",
     },
     validate: None,

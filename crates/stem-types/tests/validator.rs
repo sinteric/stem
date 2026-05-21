@@ -159,3 +159,92 @@ section{
     let diags = validate_src(src);
     assert!(diags.is_empty(), "unexpected diagnostics: {:?}", diags);
 }
+
+#[test]
+fn formula_with_leading_equals_errors_at_validate_time() {
+    let src = r#"[type:document]
+p(Total: @formula("=SUM(A1:A5)"))"#;
+    let diags = validate_src(src);
+    assert!(
+        diags
+            .iter()
+            .any(|d| d.code == "formula.unexpected_equals_prefix"
+                && d.severity == Severity::Error),
+        "expected formula.unexpected_equals_prefix at validate time, got: {:?}",
+        diags
+    );
+}
+
+#[test]
+fn formula_with_bad_syntax_errors_at_validate_time() {
+    let src = r#"[type:document]
+p(@formula("SUM(("))"#;
+    let diags = validate_src(src);
+    assert!(
+        diags
+            .iter()
+            .any(|d| d.code.starts_with("formula.") && d.severity == Severity::Error),
+        "expected formula.* error at validate time, got: {:?}",
+        diags
+    );
+}
+
+#[test]
+fn formula_with_valid_syntax_has_no_diagnostics() {
+    let src = r#"[type:document]
+p(Total: @formula("SUM(A1:A5)"))"#;
+    let diags = validate_src(src);
+    assert!(
+        diags.iter().all(|d| !d.code.starts_with("formula.")),
+        "unexpected formula diagnostics: {:?}",
+        diags
+    );
+}
+
+#[test]
+fn custom_doc_type_registered_element_validates() {
+    // Embedder defines a custom doc type "mindmap" with a "node" element.
+    use stem_core::diagnostic::Severity;
+    use stem_types::element::ElementDef;
+    use stem_types::schema::{
+        BodyKind, Category, DocumentType, ElementSchema, Registry,
+    };
+
+    const NODE: ElementDef = ElementDef {
+        schema: ElementSchema {
+            name: "node",
+            categories: &[Category::BlockLeaf],
+            doc_types: &[DocumentType::Custom("mindmap")],
+            bodies: &[BodyKind::Text],
+            parents: &["root"],
+            children: &[],
+            properties: &[],
+            doc: "Mindmap node",
+        },
+        validate: None,
+    };
+
+    let mut reg = Registry::new();
+    for def in stem_types::elements::ALL {
+        reg.insert(def.schema.clone());
+    }
+    reg.insert(NODE.schema.clone());
+
+    let r = stem_parser::parse("[type:mindmap]\nnode(idea)");
+    assert!(r.diagnostics.is_empty(), "parse errors: {:?}", r.diagnostics);
+    let diags = stem_types::validate(&r.document, &reg);
+
+    // No "unknown_doc_type" warning, no "unknown_element" warning.
+    assert!(
+        !diags.iter().any(|d| d.code == "type.unknown_doc_type"),
+        "doc-type should resolve via registry, got: {:?}",
+        diags
+    );
+    assert!(
+        !diags
+            .iter()
+            .any(|d| d.code == "type.unknown_function" && d.severity == Severity::Warning),
+        "node element should validate against custom doc type, got: {:?}",
+        diags
+    );
+}

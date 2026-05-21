@@ -47,7 +47,7 @@ impl Backend {
             .document
             .metadata
             .get_str("type")
-            .and_then(DocumentType::from_str)
+            .and_then(|s| self.registry.resolve_doc_type(s))
             .unwrap_or(DocumentType::Document);
 
         let lsp_diags: Vec<Diagnostic> = all_diags

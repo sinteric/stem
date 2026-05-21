@@ -536,6 +536,15 @@ dependencies = [
 ]
 
 [[package]]
+name = "pulldown-latex"
+version = "0.7.1"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "3b8bc0583825170e3f560701d966dc2f0e3a16946da371e37d30d3ad7207fb7e"
+dependencies = [
+ "bumpalo",
+]
+
+[[package]]
 name = "quote"
 version = "1.0.45"
 source = "registry+https://github.com/rust-lang/crates.io-index"
@@ -694,8 +703,10 @@ dependencies = [
 name = "stem-render"
 version = "0.1.0"
 dependencies = [
+ "pulldown-latex",
  "stem-core",
  "stem-parser",
+ "stem-types",
  "thiserror",
 ]
 

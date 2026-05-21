@@ -6,14 +6,32 @@
 
 use std::collections::BTreeMap;
 
+/// Document type — the named kind of document Stem is processing.
+///
+/// `Document`, `Presentation`, and `Sheet` are the three built-in
+/// kinds. Embedders that ship custom doc types (mindmaps, whiteboards,
+/// diagrams, etc.) construct [`DocumentType::Custom`] with a
+/// `&'static str` name and register elements with `doc_types: &[Custom("…")]`.
+///
+/// Names are case-sensitive. Built-in names are lowercase; embedders
+/// should follow the same convention.
 #[derive(Clone, Copy, Debug, PartialEq, Eq, Hash)]
 pub enum DocumentType {
     Document,
     Presentation,
     Sheet,
+    /// Embedder-defined doc type. The string is the name surfaced in
+    /// `type:<name>` metadata and used for `doc_types` matching.
+    Custom(&'static str),
 }
 
 impl DocumentType {
+    /// Parse a doc-type name from the `type:` metadata.
+    ///
+    /// Returns `None` for unknown names. Embedders that want to accept
+    /// custom doc types should call [`DocumentType::custom`] explicitly
+    /// rather than relying on `from_str`, since `from_str` has no way
+    /// to leak a static lifetime from a runtime string.
     pub fn from_str(s: &str) -> Option<Self> {
         match s {
             "document" => Some(Self::Document),
@@ -23,11 +41,18 @@ impl DocumentType {
         }
     }
 
+    /// Construct a custom doc type. The name must be a static string
+    /// (typically a `const` in the embedder's code).
+    pub const fn custom(name: &'static str) -> Self {
+        Self::Custom(name)
+    }
+
     pub fn as_str(self) -> &'static str {
         match self {
             Self::Document => "document",
             Self::Presentation => "presentation",
             Self::Sheet => "sheet",
+            Self::Custom(s) => s,
         }
     }
 }
@@ -119,6 +144,31 @@ impl Registry {
     /// Returns true if any schema for `name` exists (in any doc type).
     pub fn has_any(&self, name: &str) -> bool {
         self.by_name.contains_key(name)
+    }
+
+    /// Resolve a doc-type name from `type:` metadata, looking up
+    /// embedder-registered custom doc types. Built-in names short-circuit
+    /// to the corresponding variant; otherwise the registry is scanned
+    /// for an element that declares `doc_types: &[Custom(name)]`.
+    ///
+    /// Returns `None` for names neither built-in nor registered. The
+    /// validator surfaces this as `type.unknown_doc_type`.
+    pub fn resolve_doc_type(&self, name: &str) -> Option<DocumentType> {
+        if let Some(dt) = DocumentType::from_str(name) {
+            return Some(dt);
+        }
+        for variants in self.by_name.values() {
+            for v in variants {
+                for &dt in v.doc_types {
+                    if let DocumentType::Custom(s) = dt {
+                        if s == name {
+                            return Some(dt);
+                        }
+                    }
+                }
+            }
+        }
+        None
     }
 
     pub fn names_for(&self, doc_type: DocumentType) -> Vec<&'static str> {

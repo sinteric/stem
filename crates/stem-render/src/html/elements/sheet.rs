@@ -16,7 +16,7 @@ use stem_core::theme::Theme;
 
 use super::super::{format_col_letter, html_attr, html_text, parse_cell_address};
 use super::HtmlElement;
-use crate::formula;
+use stem_types::formula;
 
 pub const SHEET: HtmlElement = HtmlElement {
     name: "sheet",

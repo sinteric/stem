@@ -8,6 +8,7 @@
 
 pub mod element;
 pub mod elements;
+pub mod formula;
 pub mod schema;
 pub mod validator;
 
