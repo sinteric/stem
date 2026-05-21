@@ -137,10 +137,10 @@ sheet[id:Q4-2026]{
             html
         );
     }
-    // Cell values
+    // Cell values — column B has fmt:currency so 42000 becomes $42,000.00
     assert!(html.contains("Item"));
     assert!(html.contains("Widget"));
-    assert!(html.contains("42000"));
+    assert!(html.contains("$42,000.00"), "currency format missed: {}", html);
     assert!(html.contains("Total"));
     // Cascade: row 1 gets bold + gray bg via row[at:1] rule
     assert!(html.contains("font-weight:700"), "row-bold missed: {}", html);
