@@ -426,7 +426,12 @@ if sectPr is not None:
 hf_lines = []
 for (kind, scope), base in hf_parts.items():
     txt = part_text(base)
+    # Always emit the block so the sectPr declares the reference (even
+    # if the part has no text). This is how Word's "Different first
+    # page" / "Different odd & even pages" settings get expressed.
     if not txt:
+        scope_attr = '' if scope == 'default' else f'[scope:{scope}]'
+        hf_lines.append(f'{kind}{scope_attr}{{ p() }}')
         continue
     # Detect PAGE/NUMPAGES fields in this part to translate.
     raw = z.read(f'word/{base}.xml').decode('utf-8')

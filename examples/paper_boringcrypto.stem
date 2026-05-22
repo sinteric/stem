@@ -1,7 +1,12 @@
 [page-size:letter, margin:1in]
 
 
+header[scope:even]{ p() }
+header{ p() }
+header[scope:first]{ p() }
+footer[scope:even]{ p() }
 footer{ p("Google Inc.  2018 Version 1.7 Page @page-number()  of @total-pages() Public Material – May be reproduced only in its original entirety (without revision).") }
+footer[scope:first]{ p() }
 
 p()
 p()
