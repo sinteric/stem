@@ -1,5 +1,8 @@
 [page-size:letter, margin:1in]
 
+
+footer{ p("Google Inc.  2018 Version 1.7 Page @page-number()  of @total-pages() Public Material – May be reproduced only in its original entirety (without revision).") }
+
 title(Google Inc.)
 title(BoringCrypto)
 title(FIPS 140-2 Security Policy)
@@ -8,7 +11,11 @@ title(66005f41fbc3529ffe8d007708756720529da20d)
 title(Date: October 25th, 2018)
 image[src:"references/docx/.extracted/boringcrypto_extract/assets/image_rId8.png", alt:"figure"]
 
+pagebreak
+
 section[id:toc]
+
+pagebreak
 
 h1(Introduction)
 p("Federal Information Processing Standards Publication 140-2 — Security Requirements for Cryptographic Modules specifies requirements for cryptographic modules to be deployed in a Sensitive but Unclassified environment. The National Institute of Standards and Technology \\(NIST\\) and Communications Security Establishment Canada \\(CSE\\) Cryptographic Module Validation Program \\(CMVP\\) run the FIPS 140 program. The NVLAP accredits independent testing labs to perform FIPS 140 testing; the CMVP validates modules meeting FIPS 140 validation. Validated is the term given to a module that is documented and tested against the FIPS 140 criteria.")

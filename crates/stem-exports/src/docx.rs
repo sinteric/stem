@@ -11,7 +11,7 @@
 use std::path::{Path, PathBuf};
 
 use docx_rs::{
-    AbstractNumbering, AlignmentType, BorderType, Docx, FieldCharType, Footer, Footnote, Header,
+    AbstractNumbering, AlignmentType, BorderType, BreakType, Docx, FieldCharType, Footer, Footnote, Header,
     Hyperlink, HyperlinkType, IndentLevel, InstrNUMPAGES, InstrPAGE, InstrText, Level, LevelJc,
     LevelText, LineSpacing, LineSpacingType, NumberFormat, Numbering, NumberingId, PageMargin,
     PageOrientationType, Paragraph, Pic, Run, RunFonts, Shading, SpecialIndentType, Start, Style,
@@ -174,6 +174,9 @@ fn emit_block(docx: Docx, b: &Block, ctx: &EmitCtx, _depth: usize) -> Result<Doc
         "ol" => emit_list(docx, b, true),
         "ul" => emit_list(docx, b, false),
         "hr" => docx.add_paragraph(Paragraph::new().add_run(Run::new().add_text("───"))),
+        "pagebreak" => docx.add_paragraph(
+            Paragraph::new().add_run(Run::new().add_break(BreakType::Page)),
+        ),
         "table" => emit_table(docx, b, ctx.theme),
         "image" => emit_image(docx, b, ctx)?,
         "section" => emit_section(docx, b, ctx)?,
