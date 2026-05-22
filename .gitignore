@@ -8,3 +8,7 @@ Cargo.lock.bak
 
 # Generated WASM bindings (built by scripts/serve-playground.sh)
 /web/pkg/
+
+# Reference docx/pdf inputs used to drive exporter development
+# (personal/private files; not for distribution)
+/references/
