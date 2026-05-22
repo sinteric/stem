@@ -279,7 +279,7 @@ fn emit_section(docx: Docx, b: &Block, ctx: &EmitCtx) -> Result<Docx, DocxError>
             .without_sdt()
             .add_before_paragraph(
                 Paragraph::new()
-                    .style("Heading1")
+                    .style("TOCHeading")
                     .add_run(Run::new().add_text("Table of Contents")),
             );
         // Pre-populate TOC entries from the document outline so Word
@@ -1558,6 +1558,21 @@ fn register_styles(mut docx: Docx) -> Docx {
         .fonts(RunFonts::new().ascii("Calibri Light").hi_ansi("Calibri Light"))
         .size(56);
     docx = docx.add_style(title);
+
+    // TOCHeading — the visible "Table of Contents" label that sits
+    // immediately above the TOC field. Looks like Heading1 but has no
+    // outlineLvl so the TOC field's heading scan doesn't include
+    // itself in the TOC.
+    let toc_heading = Style::new("TOCHeading", StyleType::Paragraph)
+        .name("TOC Heading")
+        .based_on("Heading1")
+        .next("Normal")
+        .q_format(true)
+        .ui_priority(39)
+        .color("2E74B5")
+        .fonts(RunFonts::new().ascii("Calibri Light").hi_ansi("Calibri Light"))
+        .size(32);
+    docx = docx.add_style(toc_heading);
 
     // Caption — italic, smaller, dark blue-gray. Matches the look
     // Word's default Caption style gives "Figure 1." / "Table 1."
