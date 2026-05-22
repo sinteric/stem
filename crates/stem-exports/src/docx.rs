@@ -309,6 +309,9 @@ fn emit_section(docx: Docx, b: &Block, ctx: &EmitCtx) -> Result<Docx, DocxError>
                 .toc_key(info.bookmark.clone());
             toc = toc.add_item(item);
         }
+        // docx-rs always appends an extra TOC{N}-styled paragraph
+        // carrying the field's `end` marker. The repair pass strips
+        // its pStyle so the heading-style count stays correct.
         return Ok(docx.add_table_of_contents(toc));
     }
     let mut docx = docx;
@@ -754,29 +757,55 @@ fn build_cell(b: &Block, is_header: bool, theme: &Theme, force_bg: Option<String
         base.bold = true;
     }
 
-    let mut para = Paragraph::new();
-    if let Some(align) = b.prop_str("align") {
-        if let Some(a) = parse_alignment(align) {
-            para = para.align(a);
+    let align = b.prop_str("align").and_then(parse_alignment);
+
+    // Decide whether to emit one paragraph (text body) or many
+    // (block body). Multi-paragraph cells match how Word stores
+    // cell content with internal line structure — the reference's
+    // tables use this heavily.
+    let mut paragraphs: Vec<Paragraph> = Vec::new();
+    match &b.body {
+        Body::Text(_) => {
+            let mut p = Paragraph::new();
+            if let Some(a) = align {
+                p = p.align(a);
+            }
+            p = apply_pieces(p, collect_pieces(b, base));
+            paragraphs.push(p);
+        }
+        Body::Children(children) => {
+            for child in children {
+                // Each child is a paragraph-like block. Use text_para
+                // for `p` blocks, otherwise fall back to a paragraph
+                // built from the child's runs.
+                let mut p = Paragraph::new();
+                if let Some(a) = align {
+                    p = p.align(a);
+                }
+                // If the child has its own `align`, that wins.
+                if let Some(child_align) = child
+                    .prop_str("align")
+                    .and_then(parse_alignment)
+                {
+                    p = p.align(child_align);
+                }
+                p = apply_pieces(p, collect_pieces(child, base));
+                paragraphs.push(p);
+            }
+        }
+        Body::None => {
+            let mut p = Paragraph::new();
+            if let Some(a) = align {
+                p = p.align(a);
+            }
+            paragraphs.push(p);
         }
     }
-    let pieces = match &b.body {
-        Body::Text(_) => collect_pieces(b, base),
-        Body::Children(children) => {
-            // Cell may carry block children (non-standard but representable).
-            // We flatten their text into the single paragraph; full block
-            // rendering inside cells is a follow-up.
-            let mut accumulated = Vec::new();
-            for child in children {
-                accumulated.extend(collect_pieces(child, base));
-            }
-            accumulated
-        }
-        Body::None => Vec::new(),
-    };
-    para = apply_pieces(para, pieces);
 
-    let mut cell = TableCell::new().add_paragraph(para);
+    let mut cell = TableCell::new();
+    for p in paragraphs {
+        cell = cell.add_paragraph(p);
+    }
     if let Some(valign) = b.prop_str("valign") {
         if let Some(v) = parse_valign(valign) {
             cell = cell.vertical_align(v);
@@ -1239,6 +1268,7 @@ fn repair_ooxml_ordering(bytes: Vec<u8>) -> Result<Vec<u8>, DocxError> {
                 let s = repair_style_xml(&s);
                 let s = repair_lvl_xml(&s);
                 let s = normalize_toc_style_casing(&s);
+                let s = strip_toc_end_pstyle(&s);
                 s.into_bytes()
             } else {
                 contents
@@ -1285,6 +1315,29 @@ fn repair_ppr_xml(xml: &str) -> String {
         }
         out
     })
+}
+
+/// Drop the pStyle from the TOC field-end paragraph that docx-rs
+/// always appends with `TOC{N}` style. The reference doesn't count
+/// it as a TOC entry (since it has no content other than the field
+/// end), so removing its pStyle keeps the TOC1..N counts honest.
+fn strip_toc_end_pstyle(xml: &str) -> String {
+    // The pattern docx-rs emits for the field-end paragraph is
+    // narrow enough to do with a literal-replace + lookahead. Each
+    // TOC level (1..9) emits a paragraph whose entire body is the
+    // pStyle + a single end fldChar.
+    let mut out = xml.to_string();
+    for n in 1..=9 {
+        let needle = format!(
+            r#"<w:pStyle w:val="TOC{}" /><w:rPr /></w:pPr><w:r><w:rPr /><w:fldChar w:fldCharType="end" w:dirty="false" /></w:r></w:p>"#,
+            n
+        );
+        let replacement = format!(
+            r#"<w:rPr /></w:pPr><w:r><w:rPr /><w:fldChar w:fldCharType="end" w:dirty="false" /></w:r></w:p>"#,
+        );
+        out = out.replace(&needle, &replacement);
+    }
+    out
 }
 
 /// Normalize the TOC paragraph-style IDs from docx-rs's mixed-case

@@ -254,12 +254,14 @@ def emit_paragraph(p, caption_consumes=False):
     # Detect inline page break: <w:br w:type="page"/>.
     page_break_run = p.find('.//' + W + 'br' + '[@' + W + 'type="page"]')
     text = render_inline_pieces(p)
+    pre_lines = []
+    if page_break_run is not None:
+        pre_lines.append('pagebreak')
     if not text:
-        # Inline page break → emit pagebreak marker.
-        if page_break_run is not None:
-            return ['pagebreak']
-        # SEQ-only empty paragraphs (e.g. caption number placeholders
-        # with no descriptive text) preserve for spacing too.
+        # Empty paragraph (preserve for spacing) — pre_lines may carry
+        # a pagebreak.
+        if pre_lines:
+            return pre_lines
         return ['p()']
 
     # Decide stem element from style.
@@ -280,17 +282,17 @@ def emit_paragraph(p, caption_consumes=False):
                     id_attr = f'id:"{bk_name}"'
             props = ', '.join(x for x in [id_attr, num_attr] if x)
             propblk = f'[{props}]' if props else ''
-            return [f'h{n}{propblk}({escape_text_body(text)})']
+            return pre_lines + [f'h{n}{propblk}({escape_text_body(text)})']
 
     # Captions are handled by the surrounding loop, not emitted as
     # standalone p().
     if sty == 'Caption':
         return []  # consumed by the surrounding walker
 
-    # Default body paragraph.
+    # Default body paragraph (with pre_lines for page breaks).
     if not text.strip():
-        return []
-    return [f'p({escape_text_body(text)})']
+        return pre_lines
+    return pre_lines + [f'p({escape_text_body(text)})']
 
 
 def caption_text_for(p):

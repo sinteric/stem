@@ -62,9 +62,11 @@ p(The software referenced in this document is licensed to you under the terms an
 h1(Notices)
 p(This document may be freely reproduced and distributed in its entirety without modification.)
 pagebreak
+pagebreak
 p("@text[weight:bold]( )")
 p()
 p()
+pagebreak
 p("@text[weight:bold]( )")
 h1[numbered:true](Introduction)
 p("Google Inc. BoringCrypto module \\(hereafter referred to as the “module”\\) is an open-source, general-purpose cryptographic library which provides FIPS 140-2 approved cryptographic algorithms to serve BoringSSL and other user-space applications. The validated version of the library is 66005f41fbc3529ffe8d007708756720529da20d. For the purposes of the FIPS 140-2 validation, its embodiment type is defined as multi-chip standalone.")
@@ -263,7 +265,11 @@ table[border:all, caption:"Approved Services, Roles and Access Rights"]{
   }
   row{
     cell(Signature g eneration / verification)
-    cell[align:center](CTR_DRBG RSA ECDSA)
+    cell[align:center]{
+      p(CTR_DRBG)
+      p(RSA)
+      p(ECDSA)
+    }
     cell[align:center](RSA, ECDSA private key)
     cell[align:center](User, CO)
     cell[align:center](Write/Execute)
@@ -284,13 +290,20 @@ table[border:all, caption:"Approved Services, Roles and Access Rights"]{
   }
   row{
     cell(Key Generation)
-    cell[align:center](CTR_DRBG RSA ECDSA)
+    cell[align:center]{
+      p(CTR_DRBG)
+      p(RSA)
+      p(ECDSA)
+    }
     cell[align:center](RSA, ECDSA private key)
     cell[align:center](User, CO)
     cell[align:center](Write/Execute)
   }
   row{
-    cell(On-Demand Self-test)
+    cell{
+      p(On-Demand)
+      p(Self-test)
+    }
     cell[align:center](None)
     cell[align:center](None)
     cell[align:center](User, CO)
@@ -333,7 +346,10 @@ table[border:all, caption:"non-Approved or non-security relevant services"]{
   }
   row{
     cell(Signature generation/ verification)
-    cell[align:center](RSA \(non-compliant\) ECDSA \(non-compliant\))
+    cell[align:center]{
+      p(RSA \(non-compliant\))
+      p(ECDSA \(non-compliant\))
+    }
     cell[align:center](User, CO)
     cell[align:center](N/A)
   }
@@ -345,7 +361,10 @@ table[border:all, caption:"non-Approved or non-security relevant services"]{
   }
   row{
     cell(Key Generation)
-    cell[align:center](RSA \(non-compliant\) ECDSA \(non-compliant\))
+    cell[align:center]{
+      p(RSA \(non-compliant\))
+      p(ECDSA \(non-compliant\))
+    }
     cell[align:center](User, CO)
     cell[align:center](N/A)
   }
@@ -355,9 +374,15 @@ p()
 table[border:all, caption:"Non-Security Relevant Services"]{
   row[kind:header]{
     cell[align:center](@text[weight:bold](Service))
-    cell[align:center](@text[weight:bold](Approved Security) @text[weight:bold](Functions))
+    cell[align:center]{
+      p(@text[weight:bold](Approved Security))
+      p(@text[weight:bold](Functions))
+    }
     cell[align:center](@text[weight:bold](Roles))
-    cell[align:center](@text[weight:bold](Access rights to keys) @text[weight:bold]( and/or CSPs))
+    cell[align:center]{
+      p(@text[weight:bold](Access rights to keys))
+      p(@text[weight:bold]( and/or CSPs))
+    }
   }
   row{
     cell(Large integer operations)
@@ -397,7 +422,11 @@ table[border:all, caption:"Approved Algorithms and CAVP Certificates"]{
   row{
     cell[align:center](5612)
     cell[align:center](AES)
-    cell[align:center](SP 800-38A FIPS 197 SP 800-38F)
+    cell[align:center]{
+      p(SP 800-38A)
+      p(FIPS 197)
+      p(SP 800-38F)
+    }
     cell[align:center](128, 192, 256 CBC, ECB, CTR, GCM)
     cell[align:center](Encryption, Decryption , Authentication)
   }
@@ -430,10 +459,16 @@ table[border:all, caption:"Approved Algorithms and CAVP Certificates"]{
     cell[align:center](Random Bit Generation)
   }
   row{
-    cell[align:center](1520 \( CVL \) 2034)
+    cell[align:center]{
+      p(1520)
+      p(\( CVL \) 2034)
+    }
     cell[align:center](ECDSA)
     cell[align:center](FIPS 186-4)
-    cell[align:center](Signature Generation Component, Key Pair Generation, Signature Generation, Signature Verification, Public Key Validation P-224, P-256, P-384, P-512)
+    cell[align:center]{
+      p(Signature Generation Component, Key Pair Generation, Signature Generation, Signature Verification, Public Key Validation)
+      p(P-224, P-256, P-384, P-512)
+    }
     cell[align:center](Digital Signature Services)
   }
   row{
@@ -454,7 +489,11 @@ table[border:all, caption:"Approved Algorithms and CAVP Certificates"]{
     cell[align:center](3020)
     cell[align:center](RSA)
     cell[align:center](FIPS 186-4)
-    cell[align:center](Key Generation, Signature Generation, Signature Verification \(1024, 2048, 3072\) Note: Key size 1024 is only used for Signature Verification)
+    cell[align:center]{
+      p(Key Generation, Signature Generation, Signature Verification)
+      p(\(1024, 2048, 3072\))
+      p(Note: Key size 1024 is only used for Signature Verification)
+    }
     cell[align:center](Digital Signature Services)
   }
   row{
@@ -467,7 +506,10 @@ table[border:all, caption:"Approved Algorithms and CAVP Certificates"]{
   row{
     cell[align:center](2825)
     cell[align:center](Triple-DES)
-    cell[align:center](SP 800-67 SP 800-38A)
+    cell[align:center]{
+      p(SP 800-67)
+      p(SP 800-38A)
+    }
     cell[align:center](TCBC, TECB)
     cell[align:center](Encryption, Decryption)
   }
@@ -688,7 +730,10 @@ table[border:all, caption:"Conditional Self-tests"]{
   }
   row{
     cell(@text[weight:bold](Pair-wise Consistency Test))
-    cell(@text[weight:bold](ECDSA Key P) @text[weight:bold](air generation) @text[weight:bold](RSA Key Pair generation))
+    cell{
+      p(@text[weight:bold](ECDSA Key P) @text[weight:bold](air generation))
+      p(@text[weight:bold](RSA Key Pair generation))
+    }
   }
   row{
     cell(@text[weight:bold](CRNGT))
@@ -767,6 +812,7 @@ p("The TLS protocol governs the generation of the respective Triple-DES keys. Pl
 p(For all other uses of Triple-DES the user is responsible for ensuring that the module limits the number of encrypted blocks with the same key to no more than 216.)
 h3[numbered:true](RSA and ECDSA Keys)
 p(The module allows the use of 1024 bits RSA keys for legacy purposes including signature generation, which is disallowed to be used in FIPS Approved mode as per NIST SP 800-131A. Therefore, the cryptographic operations with the non-approved key sizes will result in the module operating in non-Approved mode implicitly.)
+pagebreak
 p(Approved algorithms shall not use the keys generated by the module’s non-Approved key generation methods.)
 h1[numbered:true](References and Standards)
 p(The following Standards are referred to in this Security Policy.)
@@ -813,7 +859,10 @@ table[border:all, caption:"References and Standards"]{
   }
   row{
     cell[valign:middle](SP 800-67)
-    cell(Recommendation for the Triple Data Encryption Algorithm \(TDEA\) Block Cipher)
+    cell{
+      p(Recommendation for the Triple Data Encryption Algorithm \(TDEA\))
+      p(Block Cipher)
+    }
   }
   row{
     cell[valign:middle](SP 800-56A)
