@@ -1215,6 +1215,21 @@ fn rewrite_blocks_open_attrs<F: Fn(&str, &str) -> String>(
     let mut idx = 0;
     while let Some(rel) = xml[idx..].find(open_prefix) {
         let open_abs = idx + rel;
+        // Guard against the prefix matching a longer element name
+        // (e.g. `<w:style` is also a prefix of `<w:styles>`). The byte
+        // right after the prefix must be whitespace, `>`, or `/` for
+        // this to be a true element-name match.
+        let next_byte = xml.as_bytes().get(open_abs + open_prefix.len()).copied();
+        match next_byte {
+            Some(b' ') | Some(b'\t') | Some(b'\n') | Some(b'\r') | Some(b'>') | Some(b'/') => {}
+            _ => {
+                // Not actually our element — copy up to and including
+                // the prefix, then resume scanning from there.
+                out.push_str(&xml[idx..open_abs + open_prefix.len()]);
+                idx = open_abs + open_prefix.len();
+                continue;
+            }
+        }
         out.push_str(&xml[idx..open_abs]);
         // Find end of the open tag — the next unescaped '>'.
         let mut tag_end = open_abs + open_prefix.len();
