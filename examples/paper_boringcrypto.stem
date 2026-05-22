@@ -770,51 +770,51 @@ table[border:all, caption:"References and Standards"]{
     cell[align:center](Full Specification Name)
   }
   row{
-    cell(FIPS 140-2)
+    cell[valign:middle](FIPS 140-2)
     cell(Security Requirements for Cryptographic modules, May 25 2001)
   }
   row{
-    cell(FIPS 180-4)
+    cell[valign:middle](FIPS 180-4)
     cell(Secure Hash Standard \(SHS\))
   }
   row{
-    cell(FIPS 186-4)
+    cell[valign:middle](FIPS 186-4)
     cell(Digital Signature Standard \(DSS\))
   }
   row{
-    cell(FIPS 197)
+    cell[valign:middle](FIPS 197)
     cell(Advanced Encryption Standard)
   }
   row{
-    cell(FIPS 198-1)
+    cell[valign:middle](FIPS 198-1)
     cell(The Keyed-Hash Message Authentication Code \(HMAC\))
   }
   row{
-    cell(IG)
+    cell[valign:middle](IG)
     cell(Implementation Guidance for FIPS PUB 140-2 and the Cryptographic Module Validation Program, January 11, 2016.)
   }
   row{
-    cell(SP 800-38A)
+    cell[valign:middle](SP 800-38A)
     cell(Recommendation for Block Cipher Modes of Operation: Three Variants of Ciphertext Stealing for CBC Mode)
   }
   row{
-    cell(SP 800-38D)
+    cell[valign:middle](SP 800-38D)
     cell(Recommendation for Block Cipher Modes of Operation: Galois/Counter Mode \(GCM\) and GMAC)
   }
   row{
-    cell(SP 800-38F)
+    cell[valign:middle](SP 800-38F)
     cell(Recommendation for Block Cipher Modes of Operation: Methods for Key Wrapping)
   }
   row{
-    cell(SP 800-67)
+    cell[valign:middle](SP 800-67)
     cell(Recommendation for the Triple Data Encryption Algorithm \(TDEA\) Block Cipher)
   }
   row{
-    cell(SP 800-56A)
+    cell[valign:middle](SP 800-56A)
     cell(Recommendation for Pair-Wise Key Establishment Schemes Using Discrete Logarithm Cryptography)
   }
   row{
-    cell(SP 800-90A)
+    cell[valign:middle](SP 800-90A)
     cell(Recommendation for Random Number Generation Using Deterministic Random Bit Generators)
   }
 }

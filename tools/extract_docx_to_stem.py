@@ -182,6 +182,14 @@ def table_to_stem(tbl, caption=None, indent=0):
                 cprops.append(f'colspan:{colspan}')
             if align:
                 cprops.append(f'align:{align}')
+            # Vertical align — many reference cells use vAlign=center.
+            vAlign = tcPr.find(W+'vAlign') if tcPr is not None else None
+            if vAlign is not None:
+                v = vAlign.get(W+'val')
+                if v == 'center':
+                    cprops.append('valign:middle')
+                elif v in ('top', 'bottom'):
+                    cprops.append(f'valign:{v}')
             # Detect rowspan by walking subsequent rows for vMerge=continue
             # at the same grid position (best-effort: count consecutive).
             # The OOXML data doesn't give us a direct rowspan, so we leave
