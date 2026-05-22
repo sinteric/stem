@@ -122,7 +122,11 @@ impl Exporter for DocxExporter {
         xmldocx
             .pack(cursor)
             .map_err(|e| DocxError::Pack(e.to_string()))?;
-        Ok(buf)
+        // Repair docx-rs's OOXML child-ordering bugs in-place. Word
+        // renders headings/TOC/styles correctly only when each parent
+        // element's children follow the schema order; docx-rs does
+        // not enforce this for `<w:pPr>` and `<w:style>`.
+        repair_ooxml_ordering(buf)
     }
 }
 
@@ -1019,6 +1023,298 @@ fn split_length(s: &str) -> Option<(&str, &str)> {
         return None;
     }
     Some((num, unit))
+}
+
+// --- OOXML ordering repair (workaround for docx-rs bugs) ----------------
+//
+// docx-rs 0.4.20 emits some elements with children in a non-spec order.
+// Strict Word builds (notably localized versions) silently drop the
+// affected elements, so headings render as Normal and the TOC field
+// finds no entries. We unpack the produced ZIP, rewrite the affected
+// XML parts, and repack.
+//
+// Two reorderings are required, both purely structural — no content is
+// added or removed:
+//
+//   1. `<w:pPr>` children:  <w:pStyle> must be FIRST, <w:rPr> LAST.
+//      docx-rs emits `<w:pPr><w:rPr/><w:pStyle .../></w:pPr>`.
+//
+//   2. `<w:style>` children: the metadata block (name, basedOn, next,
+//      link, autoRedefine, hidden, uiPriority, semiHidden,
+//      unhideWhenUsed, qFormat, locked, rsid) must precede pPr/rPr.
+//      docx-rs interleaves them.
+//
+// Implementation note: a real OOXML library would round-trip through
+// an XML model. For this targeted fix a lightweight string-level
+// reorder is sufficient and avoids pulling in a full parser. The
+// rewriter only touches `<w:pPr>` and `<w:style>` regions; other XML
+// is byte-identical.
+
+fn repair_ooxml_ordering(bytes: Vec<u8>) -> Result<Vec<u8>, DocxError> {
+    use std::io::{Cursor, Read, Write};
+    let reader = Cursor::new(bytes);
+    let mut archive = zip::ZipArchive::new(reader)
+        .map_err(|e| DocxError::Pack(format!("repair unzip: {}", e)))?;
+
+    let mut out: Vec<u8> = Vec::new();
+    {
+        let cursor = Cursor::new(&mut out);
+        let mut writer = zip::ZipWriter::new(cursor);
+        let options = zip::write::FileOptions::default()
+            .compression_method(zip::CompressionMethod::Deflated);
+        for i in 0..archive.len() {
+            let mut entry = archive
+                .by_index(i)
+                .map_err(|e| DocxError::Pack(format!("repair read: {}", e)))?;
+            let name = entry.name().to_string();
+            let mut contents = Vec::new();
+            entry
+                .read_to_end(&mut contents)
+                .map_err(|e| DocxError::Pack(format!("repair read body: {}", e)))?;
+            let fixed = if needs_repair(&name) {
+                let s = String::from_utf8(contents).map_err(|e| {
+                    DocxError::Pack(format!("repair utf8 in {}: {}", name, e))
+                })?;
+                let s = repair_ppr_xml(&s);
+                let s = repair_style_xml(&s);
+                s.into_bytes()
+            } else {
+                contents
+            };
+            writer
+                .start_file(&name, options)
+                .map_err(|e| DocxError::Pack(format!("repair start: {}", e)))?;
+            writer
+                .write_all(&fixed)
+                .map_err(|e| DocxError::Pack(format!("repair write: {}", e)))?;
+        }
+        writer
+            .finish()
+            .map_err(|e| DocxError::Pack(format!("repair finish: {}", e)))?;
+    }
+    Ok(out)
+}
+
+fn needs_repair(name: &str) -> bool {
+    name.ends_with(".xml") && name.starts_with("word/")
+}
+
+/// Walk every `<w:pPr>...</w:pPr>` region and reorder its direct
+/// children: `<w:pStyle .../>` first, `<w:rPr .../>` last, everything
+/// else preserved in between in original order.
+fn repair_ppr_xml(xml: &str) -> String {
+    rewrite_blocks(xml, "<w:pPr>", "</w:pPr>", |inner| {
+        let children = split_top_level_children(inner);
+        let mut pstyle: Vec<&str> = Vec::new();
+        let mut rpr: Vec<&str> = Vec::new();
+        let mut middle: Vec<&str> = Vec::new();
+        for c in children {
+            if c.starts_with("<w:pStyle") {
+                pstyle.push(c);
+            } else if c.starts_with("<w:rPr") {
+                rpr.push(c);
+            } else {
+                middle.push(c);
+            }
+        }
+        let mut out = String::with_capacity(inner.len());
+        for c in pstyle.iter().chain(middle.iter()).chain(rpr.iter()) {
+            out.push_str(c);
+        }
+        out
+    })
+}
+
+/// Walk every `<w:style ...>...</w:style>` region and reorder its
+/// direct children. The OOXML spec for CT_Style demands:
+/// name, aliases, basedOn, next, link, autoRedefine, hidden,
+/// uiPriority, semiHidden, unhideWhenUsed, qFormat, locked, personal*,
+/// rsid, pPr, rPr, tblPr, trPr, tcPr, tblStylePr. docx-rs writes them
+/// out of order.
+fn repair_style_xml(xml: &str) -> String {
+    // <w:style ...> attributes are dynamic; we have to match the open
+    // tag with its trailing attributes. rewrite_blocks_open_attrs walks
+    // matching open/close with arbitrary attrs on open.
+    rewrite_blocks_open_attrs(xml, "<w:style", "</w:style>", |open_tag, inner| {
+        let children = split_top_level_children(inner);
+        // Bucket by element name in spec order.
+        const ORDER: &[&str] = &[
+            "<w:name", "<w:aliases", "<w:basedOn", "<w:next", "<w:link",
+            "<w:autoRedefine", "<w:hidden", "<w:uiPriority", "<w:semiHidden",
+            "<w:unhideWhenUsed", "<w:qFormat", "<w:locked", "<w:personal",
+            "<w:personalCompose", "<w:personalReply", "<w:rsid",
+            "<w:pPr", "<w:rPr", "<w:tblPr", "<w:trPr", "<w:tcPr",
+            "<w:tblStylePr",
+        ];
+        let mut buckets: Vec<Vec<&str>> = vec![Vec::new(); ORDER.len()];
+        let mut leftover: Vec<&str> = Vec::new();
+        for c in children {
+            let mut placed = false;
+            for (i, prefix) in ORDER.iter().enumerate() {
+                if c.starts_with(prefix) {
+                    buckets[i].push(c);
+                    placed = true;
+                    break;
+                }
+            }
+            if !placed {
+                leftover.push(c);
+            }
+        }
+        let mut out = String::with_capacity(open_tag.len() + inner.len() + 16);
+        out.push_str(open_tag);
+        for bucket in &buckets {
+            for c in bucket {
+                out.push_str(c);
+            }
+        }
+        for c in leftover {
+            out.push_str(c);
+        }
+        out.push_str("</w:style>");
+        out
+    })
+}
+
+/// Walk `xml` and for every region delimited by exactly `open` and
+/// `close` (matched at the literal level — not nested), pass the inner
+/// content to `f` and replace it.
+fn rewrite_blocks<F: Fn(&str) -> String>(xml: &str, open: &str, close: &str, f: F) -> String {
+    let mut out = String::with_capacity(xml.len());
+    let mut idx = 0;
+    while let Some(rel) = xml[idx..].find(open) {
+        let open_abs = idx + rel;
+        let body_start = open_abs + open.len();
+        out.push_str(&xml[idx..body_start]);
+        let Some(close_rel) = xml[body_start..].find(close) else {
+            // No matching close — emit the rest verbatim and stop.
+            idx = body_start;
+            break;
+        };
+        let body_end = body_start + close_rel;
+        let inner = &xml[body_start..body_end];
+        out.push_str(&f(inner));
+        out.push_str(close);
+        idx = body_end + close.len();
+    }
+    out.push_str(&xml[idx..]);
+    out
+}
+
+/// Like `rewrite_blocks` but the open tag has arbitrary attributes
+/// (e.g. `<w:style w:type="paragraph" w:styleId="Heading1">`). `f`
+/// receives the full open tag (including `>`) and the inner content,
+/// and is responsible for emitting the whole replacement block.
+fn rewrite_blocks_open_attrs<F: Fn(&str, &str) -> String>(
+    xml: &str,
+    open_prefix: &str,
+    close: &str,
+    f: F,
+) -> String {
+    let mut out = String::with_capacity(xml.len());
+    let mut idx = 0;
+    while let Some(rel) = xml[idx..].find(open_prefix) {
+        let open_abs = idx + rel;
+        out.push_str(&xml[idx..open_abs]);
+        // Find end of the open tag — the next unescaped '>'.
+        let mut tag_end = open_abs + open_prefix.len();
+        let bytes = xml.as_bytes();
+        while tag_end < bytes.len() && bytes[tag_end] != b'>' {
+            tag_end += 1;
+        }
+        if tag_end >= bytes.len() {
+            out.push_str(&xml[open_abs..]);
+            return out;
+        }
+        let open_tag_end = tag_end + 1; // include the '>'
+        // If the open tag is self-closing (`/>`), nothing to rewrite —
+        // emit verbatim and continue.
+        if tag_end > 0 && bytes[tag_end - 1] == b'/' {
+            out.push_str(&xml[open_abs..open_tag_end]);
+            idx = open_tag_end;
+            continue;
+        }
+        let open_tag = &xml[open_abs..open_tag_end];
+        let body_start = open_tag_end;
+        let Some(close_rel) = xml[body_start..].find(close) else {
+            out.push_str(&xml[open_abs..]);
+            return out;
+        };
+        let body_end = body_start + close_rel;
+        let inner = &xml[body_start..body_end];
+        out.push_str(&f(open_tag, inner));
+        idx = body_end + close.len();
+    }
+    out.push_str(&xml[idx..]);
+    out
+}
+
+/// Split a block's inner content into its top-level XML children.
+/// Recognizes self-closing tags (`<x .../>`) and paired tags
+/// (`<x>...</x>`). Whitespace between tags is treated as belonging to
+/// the following child.
+fn split_top_level_children(inner: &str) -> Vec<&str> {
+    let mut out: Vec<&str> = Vec::new();
+    let bytes = inner.as_bytes();
+    let mut i = 0;
+    while i < bytes.len() {
+        // Skip leading whitespace between tags.
+        let mut j = i;
+        while j < bytes.len() && bytes[j].is_ascii_whitespace() {
+            j += 1;
+        }
+        if j >= bytes.len() {
+            break;
+        }
+        if bytes[j] != b'<' {
+            // Stray text — bail; better to leave the whole inner
+            // untouched than to corrupt it. The caller will emit the
+            // already-collected children verbatim, which would skip
+            // this text. Avoid that: return an empty vec to signal
+            // "don't reorder".
+            return Vec::new();
+        }
+        let tag_start = j;
+        // Read tag name (after '<').
+        let name_start = j + 1;
+        let mut k = name_start;
+        while k < bytes.len()
+            && bytes[k] != b' '
+            && bytes[k] != b'\t'
+            && bytes[k] != b'/'
+            && bytes[k] != b'>'
+        {
+            k += 1;
+        }
+        let name = &inner[name_start..k];
+        // Find end of opening tag (next unescaped '>').
+        let mut g = k;
+        while g < bytes.len() && bytes[g] != b'>' {
+            g += 1;
+        }
+        if g >= bytes.len() {
+            return Vec::new();
+        }
+        let self_closing = g > 0 && bytes[g - 1] == b'/';
+        let after_open = g + 1;
+        if self_closing {
+            out.push(&inner[tag_start..after_open]);
+            i = after_open;
+        } else {
+            // Find the matching closing tag `</name>`. We don't handle
+            // nested same-name children — none of the elements we
+            // care about are recursive at this level (no <w:pPr>
+            // inside <w:pPr>).
+            let close_tag = format!("</{}>", name);
+            let Some(rel) = inner[after_open..].find(&close_tag) else {
+                return Vec::new();
+            };
+            let end = after_open + rel + close_tag.len();
+            out.push(&inner[tag_start..end]);
+            i = end;
+        }
+    }
+    out
 }
 
 // --- styles -------------------------------------------------------------
