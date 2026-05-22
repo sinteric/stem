@@ -198,11 +198,19 @@ def emit_paragraph(p, caption_consumes=False):
     # SEQ-only paragraphs (figure/table counter) are usually inside captions —
     # we'll consume captions as table/image attributes, so allow them through.
 
+    # Detect inline page break: <w:br w:type="page"/>.
+    page_break_run = p.find('.//' + W + 'br' + '[@' + W + 'type="page"]')
     text = render_inline_pieces(p)
     if not text:
-        # Empty paragraph with no inlines.
-        # Captions sometimes carry a SEQ-only run with empty text; skip.
-        return []
+        # Inline page break → emit pagebreak marker.
+        if page_break_run is not None:
+            return ['pagebreak']
+        # Otherwise an empty paragraph — preserve it for spacing.
+        # (skip if it's a Caption with no text, which is just SEQ chrome)
+        if (sty == 'Caption') or any(it.text and 'SEQ' in it.text
+                                     for it in p.iter(W+'instrText')):
+            return []
+        return ['p()']
 
     # Decide stem element from style.
     if sty == 'Title':
