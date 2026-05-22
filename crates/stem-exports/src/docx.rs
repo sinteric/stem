@@ -1204,6 +1204,7 @@ fn repair_ooxml_ordering(bytes: Vec<u8>) -> Result<Vec<u8>, DocxError> {
                 let s = repair_ppr_xml(&s);
                 let s = repair_style_xml(&s);
                 let s = repair_lvl_xml(&s);
+                let s = normalize_toc_style_casing(&s);
                 s.into_bytes()
             } else {
                 contents
@@ -1250,6 +1251,21 @@ fn repair_ppr_xml(xml: &str) -> String {
         }
         out
     })
+}
+
+/// Normalize the TOC paragraph-style IDs from docx-rs's mixed-case
+/// `ToC1`..`ToC9` to Word's canonical uppercase `TOC1`..`TOC9`. The
+/// rewrite touches both the style definitions in styles.xml and the
+/// pStyle references in document.xml.
+fn normalize_toc_style_casing(xml: &str) -> String {
+    let mut out = xml.to_string();
+    for n in 1..=9 {
+        // styles.xml: `styleId="ToC1"` → `styleId="TOC1"`
+        out = out.replace(&format!("styleId=\"ToC{}\"", n), &format!("styleId=\"TOC{}\"", n));
+        // pStyle refs in document.xml: `w:val="ToC1"` → `w:val="TOC1"`
+        out = out.replace(&format!("w:val=\"ToC{}\"", n), &format!("w:val=\"TOC{}\"", n));
+    }
+    out
 }
 
 /// Reorder children inside every `<w:lvl ...>...</w:lvl>` element to
