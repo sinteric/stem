@@ -162,20 +162,88 @@ def cell_text(tc) -> str:
     return re.sub(r'  +', ' ', out).strip()
 
 
+def paragraph_inline_text(p_in):
+    """Like cell_text but for a single paragraph: walk its runs and
+    wrap bold/italic in @text spans. Returns the body fragment ready
+    to drop into `p(...)`."""
+    parts = []
+    for r in p_in.iter(W+'r'):
+        txt = ''.join(t.text or '' for t in r.iter(W+'t'))
+        if not txt:
+            continue
+        rPr = r.find(W+'rPr')
+        is_bold = rPr is not None and rPr.find(W+'b') is not None
+        is_italic = rPr is not None and rPr.find(W+'i') is not None
+        esc = stem_escape(txt)
+        if is_bold and is_italic:
+            parts.append(f'@text[weight:bold, style:italic]({esc})')
+        elif is_bold:
+            parts.append(f'@text[weight:bold]({esc})')
+        elif is_italic:
+            parts.append(f'@text[style:italic]({esc})')
+        else:
+            parts.append(esc)
+    import re
+    return re.sub(r'  +', ' ', ' '.join(parts)).strip()
+
+
+def compute_rowspans(rows):
+    """Walk rows top-to-bottom and compute the rowspan for each
+    vMerge=restart cell by counting subsequent vMerge=continue cells
+    at the same grid position. Returns a dict keyed by (row_idx,
+    cell_idx) → rowspan integer."""
+    rowspans = {}
+    # Build per-row list of (grid_col, vmerge_val, colspan, cell_idx)
+    grids = []
+    for r_idx, tr in enumerate(rows):
+        col = 0
+        per_row = []
+        cells = tr.findall(W+'tc')
+        for c_idx, tc in enumerate(cells):
+            tcPr = tc.find(W+'tcPr')
+            colspan = 1
+            vmerge = None
+            if tcPr is not None:
+                gs = tcPr.find(W+'gridSpan')
+                if gs is not None:
+                    colspan = int(gs.get(W+'val', 1))
+                vm = tcPr.find(W+'vMerge')
+                if vm is not None:
+                    vmerge = vm.get(W+'val') or 'continue'
+            per_row.append((col, vmerge, colspan, c_idx))
+            col += colspan
+        grids.append(per_row)
+    for r_idx, row in enumerate(grids):
+        for (col, vmerge, colspan, c_idx) in row:
+            if vmerge != 'restart':
+                continue
+            # Count subsequent rows with continue at the same col.
+            span = 1
+            for r2 in range(r_idx + 1, len(grids)):
+                cont = any(c == col and vm == 'continue'
+                           for (c, vm, _, _) in grids[r2])
+                if cont:
+                    span += 1
+                else:
+                    break
+            if span > 1:
+                rowspans[(r_idx, c_idx)] = span
+    return rowspans
+
+
 def table_to_stem(tbl, caption=None, indent=0):
     sp = '  ' * indent
     props = ['border:all']
     if caption:
-        # `caption` becomes a stem string prop; backslash-escape quotes.
         esc = caption.replace('\\', '\\\\').replace('"', '\\"')
         props.append(f'caption:"{esc}"')
     out = [f'{sp}table[{", ".join(props)}]{{']
     rows = tbl.findall(W+'tr')
-    # Track per-column vMerge to skip continuation cells.
+    rowspans = compute_rowspans(rows)
     for i, tr in enumerate(rows):
         is_header = (i == 0)
         out.append(f'{sp}  row{"[kind:header]" if is_header else ""}{{')
-        for tc in tr.findall(W+'tc'):
+        for c_idx, tc in enumerate(tr.findall(W+'tc')):
             tcPr = tc.find(W+'tcPr')
             colspan = 1
             vmerge_val = None
@@ -187,7 +255,6 @@ def table_to_stem(tbl, caption=None, indent=0):
                 if vm is not None:
                     vmerge_val = vm.get(W+'val') or 'continue'
             if vmerge_val == 'continue':
-                # Our exporter synthesizes these. Don't emit.
                 continue
             # Detect cell alignment: walk paragraphs inside the cell
             # and find the dominant <w:jc> value. Cells with a uniform
@@ -208,6 +275,9 @@ def table_to_stem(tbl, caption=None, indent=0):
             cprops = []
             if colspan > 1:
                 cprops.append(f'colspan:{colspan}')
+            rs = rowspans.get((i, c_idx))
+            if rs and rs > 1:
+                cprops.append(f'rowspan:{rs}')
             if align:
                 cprops.append(f'align:{align}')
             # Vertical align — many reference cells use vAlign=center.
@@ -223,9 +293,25 @@ def table_to_stem(tbl, caption=None, indent=0):
             # The OOXML data doesn't give us a direct rowspan, so we leave
             # rowspan to manual fixup pass.
             cprop_str = '[' + ', '.join(cprops) + ']' if cprops else ''
-            body_txt = txt  # cell_text already escapes & wraps @text spans
-            if body_txt:
-                out.append(f'{sp}    cell{cprop_str}({body_txt})')
+            # If the cell has multiple non-empty paragraphs, emit each
+            # as a `p(...)` inside `cell{ ... }` to mirror Word's
+            # multi-paragraph cell content. Single-paragraph cells use
+            # the inline `cell(...)` form.
+            cell_paras = [p_in for p_in in tc.findall(W+'p')]
+            para_texts = []
+            for p_in in cell_paras:
+                t = ' '.join(s for s in [paragraph_inline_text(p_in)] if s)
+                if t:
+                    para_texts.append(t)
+            if len(para_texts) > 1:
+                out.append(f'{sp}    cell{cprop_str}{{')
+                for pt in para_texts:
+                    out.append(f'{sp}      p({pt})')
+                out.append(f'{sp}    }}')
+            elif para_texts:
+                out.append(f'{sp}    cell{cprop_str}({para_texts[0]})')
+            elif txt:
+                out.append(f'{sp}    cell{cprop_str}({txt})')
             else:
                 out.append(f'{sp}    cell{cprop_str}()')
         out.append(f'{sp}  }}')

@@ -695,7 +695,7 @@ table[border:all, caption:"Power-on Self-tests"]{
     cell(@text[weight:bold](HMAC-SHA-512))
   }
   row{
-    cell(@text[weight:bold](Known Answer Test))
+    cell[rowspan:8](@text[weight:bold](Known Answer Test))
     cell(@text[weight:bold](AES KAT \(encryption and decryption. Key size: 128-bits\)))
   }
   row{
