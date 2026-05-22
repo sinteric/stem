@@ -101,11 +101,17 @@ impl Exporter for DocxExporter {
         out = register_styles(out);
 
         let headings = collect_headings(&cooked.blocks);
+        let n_headings = headings.len();
         let ctx = EmitCtx {
             theme,
             image_base: self.image_base.as_deref(),
             headings,
             heading_cursor: std::cell::Cell::new(0),
+            // Reserve IDs 1..=n_headings for heading bookmarks; caption
+            // bookmarks continue past that.
+            bookmark_id: std::cell::Cell::new(n_headings + 1),
+            table_caption_seq: std::cell::Cell::new(0),
+            figure_caption_seq: std::cell::Cell::new(0),
         };
 
         // Apply doc-level page setup from metadata. The schema gives
@@ -168,6 +174,13 @@ struct EmitCtx<'a> {
     /// paragraph with its pre-assigned bookmark. Wrapped in a Cell so
     /// `&EmitCtx` callers can advance it.
     heading_cursor: std::cell::Cell<usize>,
+    /// Bookmark id counter shared across heading + caption emission.
+    bookmark_id: std::cell::Cell<usize>,
+    /// Per-caption-kind sequence counters for `_Toc_table_N` /
+    /// `_Toc_figure_N` bookmark names — these let Word "Insert Table
+    /// of Tables/Figures" find each caption.
+    table_caption_seq: std::cell::Cell<usize>,
+    figure_caption_seq: std::cell::Cell<usize>,
 }
 
 /// One entry in the pre-walked heading outline. The bookmark name is
@@ -231,7 +244,7 @@ fn emit_block(docx: Docx, b: &Block, ctx: &EmitCtx, _depth: usize) -> Result<Doc
         "pagebreak" => docx.add_paragraph(
             Paragraph::new().add_run(Run::new().add_break(BreakType::Page)),
         ),
-        "table" => emit_table(docx, b, ctx.theme),
+        "table" => emit_table(docx, b, ctx),
         "image" => emit_image(docx, b, ctx)?,
         "section" => emit_section(docx, b, ctx)?,
         "title" => docx.add_paragraph(title_para(b)),
@@ -547,7 +560,8 @@ fn styled_run(text: &str, style: RunStyle) -> Run {
 /// Supports: `border` (none|outer|all), `stripe`, `caption`, per-row
 /// `kind` (header rows get bold runs + a light shading), per-cell
 /// `colspan`, `rowspan`, `bg`, `align`, `valign`.
-fn emit_table(docx: Docx, b: &Block, theme: &Theme) -> Docx {
+fn emit_table(docx: Docx, b: &Block, ctx: &EmitCtx) -> Docx {
+    let theme = ctx.theme;
     let border_mode = match b.prop_str("border").unwrap_or("none") {
         "all" => BorderMode::All,
         "outer" => BorderMode::Outer,
@@ -564,7 +578,7 @@ fn emit_table(docx: Docx, b: &Block, theme: &Theme) -> Docx {
             // Empty table — still emit the caption (if any) so the
             // SEQ counter advances per source declaration.
             if let Some(c) = caption_text {
-                docx = docx.add_paragraph(caption_paragraph(CaptionKind::Table, &c));
+                docx = docx.add_paragraph(caption_paragraph(CaptionKind::Table, &c, ctx));
             }
             return docx;
         }
@@ -598,7 +612,7 @@ fn emit_table(docx: Docx, b: &Block, theme: &Theme) -> Docx {
     // the BoringCrypto FIPS reference). Images keep the same below
     // convention.
     if let Some(c) = caption_text {
-        docx = docx.add_paragraph(caption_paragraph(CaptionKind::Table, &c));
+        docx = docx.add_paragraph(caption_paragraph(CaptionKind::Table, &c, ctx));
     }
     docx
 }
@@ -1051,7 +1065,7 @@ fn emit_image(docx: Docx, b: &Block, ctx: &EmitCtx) -> Result<Docx, DocxError> {
 
     let mut docx = docx.add_paragraph(Paragraph::new().add_run(Run::new().add_image(pic)));
     if let Some(caption) = b.prop_str("caption") {
-        docx = docx.add_paragraph(caption_paragraph(CaptionKind::Figure, caption));
+        docx = docx.add_paragraph(caption_paragraph(CaptionKind::Figure, caption, ctx));
     }
     Ok(docx)
 }
@@ -1081,15 +1095,35 @@ impl CaptionKind {
 
 /// Build the canonical "Figure N. <text>" / "Table N. <text>" caption
 /// paragraph, with the number rendered as a live `SEQ` field that
-/// Word increments per occurrence in document order.
-fn caption_paragraph(kind: CaptionKind, text: &str) -> Paragraph {
+/// Word increments per occurrence in document order. Wraps the
+/// paragraph in a `_Toc_<kind>_<seq>` bookmark so Word's "Insert
+/// Table of Tables/Figures" generator (and any inline cross-refs to
+/// "Table N" / "Figure N") can anchor here.
+fn caption_paragraph(kind: CaptionKind, text: &str, ctx: &EmitCtx) -> Paragraph {
     let instr = InstrText::Unsupported(format!(" SEQ {} \\* ARABIC ", kind.seq_name()));
     let seq_run = Run::new()
         .add_field_char(FieldCharType::Begin, false)
         .add_instr_text(instr)
         .add_field_char(FieldCharType::End, false);
+    let seq_n = match kind {
+        CaptionKind::Table => {
+            let n = ctx.table_caption_seq.get() + 1;
+            ctx.table_caption_seq.set(n);
+            n
+        }
+        CaptionKind::Figure => {
+            let n = ctx.figure_caption_seq.get() + 1;
+            ctx.figure_caption_seq.set(n);
+            n
+        }
+    };
+    let bm_id = ctx.bookmark_id.get();
+    ctx.bookmark_id.set(bm_id + 1);
+    let bm_name = format!("_Toc_{}_{}", kind.seq_name().to_lowercase(), seq_n);
     Paragraph::new()
         .style("Caption")
+        .add_bookmark_start(bm_id, bm_name)
+        .add_bookmark_end(bm_id)
         .add_run(Run::new().add_text(kind.label()))
         .add_run(seq_run)
         .add_run(Run::new().add_text(format!(". {}", text)))
