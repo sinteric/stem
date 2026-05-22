@@ -1,134 +1,170 @@
 # Stem
 
-A small markup language designed to be **AI-friendly to generate**,
-**human-friendly to read**, and **compilable** to docx/pptx/pdf/sheet
-formats without manual fix-up.
+A markup language for documents, presentations, and spreadsheets.
+One source compiles to **HTML, Markdown, PDF, docx, and xlsx**.
+
+Stem's source language IS the AST — there's no hidden intermediate
+representation. A `.stem` file reads like the document it describes,
+and round-trips losslessly through every supported exporter.
 
 ```stem
-[type:document, locale:ko-KR, title:"2026 Roadmap"]
+[type:document, title:"Hello"]
 
-section{
-  h1(2026 Product Roadmap)
-  h2(Strategy Team)
-  date(2026.05.20)
-}
+# Welcome to Stem
+p(This is a paragraph with @text[weight:bold](bold), @text[style:italic](italic),
+  and @link[to:"https://example.com"](a link).)
 
-section{
-  h2(Background)
-
-  p(Existing document ecosystems are @text[color:primary](falling behind)
-  in the AI era. @footnote(Gartner 2025 Report))
-
-  layout[kind:two-column]{
-    col{
-      h3(Problems)
-      ol[style:1.]{
-        li(Format fragmentation)
-        li(Hard to generate with AI)
-      }
-    }
-    col{
-      h3(Opportunities)
-      ol[style:가.]{
-        li(Single source format)
-        li(AI-native design)
-      }
-    }
-  }
-
-  table[border:outer]{
-    row[kind:header]{
-      cell(Phase)
-      cell(Content)
-      cell[colspan:2](Timeline)
-    }
-    row{
-      cell(Phase 1)
-      cell(Spec finalization)
-      cell(2026 Q2)
-      cell[bg:yellow](In Progress)
-    }
-  }
+ul{
+  li(One)
+  li(Two)
+  li(Three)
 }
 ```
 
-## Why
+## What's it for
 
-Existing formats like `.docx` and `.pptx` are **editor-state** formats,
-not **content + layout-intent** formats. Stem separates the two: the AST
-carries semantic structure (sections, tables, layouts) and the renderer
-decides how that structure manifests in each output format.
+- **Authoring once, publishing to many formats** without writing the
+  same content in five tools.
+- **AI-assisted document generation** — Stem's uniform grammar (no
+  special cases, no scripting layer, no macros) is designed to be
+  reliably emittable by LLMs.
+- **Spreadsheets in source control** — Stem sheets are plain text with
+  `@formula(...)` cells, diff-able and reviewable.
+- **Embedding in apps** — Stem is a Rust library; use it as the
+  document layer of your editor, generator, or pipeline.
 
-## Crates
+## Format coverage
 
-| Crate | Purpose |
-|-------|---------|
-| [`stem-core`](crates/stem-core) | AST, spans, diagnostics, theme types — no dependencies |
-| [`stem-parser`](crates/stem-parser) | Source → AST + diagnostics, cook pass for sheet desugaring/cascade |
-| [`stem-types`](crates/stem-types) | Element registry + validator (per-doc-type) |
-| [`stem-render`](crates/stem-render) | Renderer trait + HTML (full) + docx/pdf (stubs); spreadsheet formula engine |
-| [`stem-lsp`](crates/stem-lsp) | `tower-lsp` server: diagnostics, completion, hover, symbols, semantic tokens |
-| [`stem-cli`](crates/stem-cli) | `stem` binary — `parse` / `check` / `render` / `registry` |
-| [`stem-wasm`](crates/stem-wasm) | `wasm-bindgen` bindings powering the live web playground in `web/` |
+|         | Import        | Export                                                          |
+|---------|---------------|-----------------------------------------------------------------|
+| Stem    | ✅ canonical  | —                                                               |
+| HTML    | —             | ✅ full                                                          |
+| Markdown| ✅ MVP        | ✅ MVP (round-trips with importer)                              |
+| PDF     | —             | ✅ MVP (custom fonts incl. CJK, real metrics, italic/bold)      |
+| docx    | planned       | ✅ MVP (headings, lists, inline styling, code)                  |
+| xlsx    | planned       | ✅ MVP (cells, formulas, multi-sheet)                           |
+| pptx    | planned       | planned                                                         |
+| hwpx    | planned       | planned                                                         |
+| image   | n/a           | planned (SVG / PNG)                                             |
 
-Detailed design lives in [`docs/grammar.md`](docs/grammar.md) (formal
-EBNF + content disambiguation rules), [`docs/schema.md`](docs/schema.md)
-(element vocabulary), and [`docs/architecture.md`](docs/architecture.md).
+All exporters are native Rust. No headless browsers, no shellouts.
 
-## Playground (live web preview)
+## Status
 
-A WASM build of the parser + validator + HTML renderer drives a
-live-preview playground:
+Early. The spec is settled and tested (179 workspace tests). HTML and
+Markdown round-trip cleanly; PDF/docx/xlsx exporters cover their 80%
+use cases. Importers other than Markdown are not yet built. APIs are
+pre-1.0 and may change.
+
+If you ship something on top of Stem, please open an issue — early
+users shape what stabilizes first.
+
+## Try it
 
 ```sh
+git clone https://github.com/sinteric/stem
+cd stem
+
+# Build and run the test suite
+cargo test --workspace --all-features
+
+# Render a Stem source to HTML
+echo 'h1(Hello) p(world)' | cargo run --bin stem -- render --format html
+
+# Or to PDF, docx, xlsx
+echo 'h1(Hi)' | cargo run --bin stem -- render --format pdf > out.pdf
+echo 'h1(Hi)' | cargo run --bin stem -- render --format docx > out.docx
+echo '[type:sheet]
+sheet{ cell[at:A1](42) cell[at:A2](@formula("A1*2")) }' \
+  | cargo run --bin stem -- render --format xlsx > out.xlsx
+
+# Live playground (auto-updates as you type)
 ./scripts/serve-playground.sh
 # → http://localhost:8080
 ```
 
-First run auto-installs the wasm32 target and `wasm-pack`. After that
-it's fast. Source on the left, sandboxed iframe preview on the right,
-diagnostics underneath — all updates on keystroke (50ms debounce).
-Source is auto-persisted to `localStorage`. Double-click reset to load
-the sheet demo (formulas + cascade).
+## The shape of Stem
 
-## CLI usage
+Six block forms, uniform across all doc types:
 
-`stem` is a Unix-pipeline tool — it reads from stdin and writes to
-stdout, so it composes with `<`, `>`, `|`, `tee`, etc.:
-
-```sh
-stem render --format html < examples/roadmap.stem > roadmap.html
-stem check                 < examples/roadmap.stem
-stem parse                 < examples/roadmap.stem
-stem registry              # dump function registry
+```stem
+name                          // bare
+name[k:v]                     // with properties
+name[k:v](text body)          // with text body
+name[k:v]{ child child }      // with child blocks
+@inline[k:v](inline body)     // inline element inside a text body
+"quoted text"                 // string literal
 ```
 
-`stem render --format docx|pdf` is wired through the same renderer
-trait; the docx and pdf renderers are currently stubs (return
-`NotImplemented`) with full interface contracts in
-`crates/stem-render/src/{docx,pdf}.rs` for a future implementation.
+Three built-in document types — `document`, `presentation`, `sheet` —
+plus `DocumentType::Custom("…")` for embedders who want their own
+(mindmap, whiteboard, diagram).
 
-## LSP
+See [`docs/grammar.md`](docs/grammar.md) for the normative grammar and
+[`docs/schema.md`](docs/schema.md) for the element vocabulary.
 
-`stem-lsp` is a binary; point your editor's generic LSP client at it
-for `.stem` files. Capabilities:
+## Architecture
 
-- Diagnostics (parser + validator, merged)
-- Completion (elements valid for the current document `type`)
-- Hover (element doc + property list)
-- Document symbols (outline of sections, slides, sheets, tables)
-- Semantic tokens (block names, property keys, string values)
-
-## Building
-
-```sh
-cargo build --workspace
-cargo test --workspace
+```
+       source (.stem) ──▶ stem-parser ──▶ AST ◀── stem-imports/<format>
+                                          │
+                                          ▼
+                                     stem-types
+                                     (validate)
+                                          │
+                       ┌──────────────────┼──────────────────┐
+                       ▼                  ▼                  ▼
+              stem-exports/<format>   stem-lsp           stem-cli
 ```
 
-124 tests cover the grammar's edge cases, schema validation, sheet
-desugaring/merging/cascading, formula evaluation, and HTML output.
+`stem-imports/<format>` and `stem-exports/<format>` are feature-gated
+modules. You compile only the formats you need:
+
+```toml
+[dependencies]
+stem-exports = { version = "0.1", features = ["html", "pdf"] }
+stem-imports = { version = "0.1", features = ["markdown"] }
+```
+
+See [`docs/architecture.md`](docs/architecture.md) for the diagram and
+rationale, and [`docs/implementing-formats.md`](docs/implementing-formats.md)
+for the format-module conventions.
+
+## Why another markup language
+
+Stem occupies a narrow gap:
+
+- **Markdown** is great until you need real tables, sheets, slides,
+  styling, or output to docx. Then it stops scaling.
+- **LaTeX** is powerful but Turing-complete with macros — slow, opaque
+  to static analysis, hard for LLMs to produce reliably.
+- **AsciiDoc / reStructuredText** sit in between but accumulate special
+  cases as they grow.
+- **Typst** is excellent for typesetting but has a scripting layer
+  (functions, control flow) that complicates the AI-generation case.
+
+Stem's bet: a strictly declarative grammar with one uniform block
+shape, no macros, no scripting, plus a single AST that's the source
+language itself — readable like Markdown, expressive enough for
+sheets and slides, structured enough for AI to produce.
+
+## Contributing
+
+The codebase is a Cargo workspace. Each format is one feature in
+`stem-imports` or `stem-exports`. To add a new format, see
+[`docs/implementing-formats.md`](docs/implementing-formats.md).
+
+Most-needed contributions right now:
+
+- pptx exporter (presentation doc type's natural target)
+- docx tables, images, links, footnotes
+- xlsx cell format mapping (`fmt:currency` → Excel format strings)
+- docx / xlsx / pptx importers
+- HWPX (Korean-market differentiator)
+
+Run `cargo test --workspace --all-features` before sending a PR.
 
 ## License
 
-MIT OR Apache-2.0
+Dual-licensed under your choice of [MIT](LICENSE-MIT) or
+[Apache 2.0](LICENSE-APACHE).
