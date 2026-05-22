@@ -8,6 +8,7 @@ pub mod content_types;
 pub mod doc_props;
 pub mod document;
 pub mod font_table;
+pub mod numbering;
 pub mod rels;
 pub mod settings;
 pub mod styles;
@@ -58,6 +59,7 @@ pub fn minimal_empty_doc() -> Result<Vec<u8>, DocxV2Error> {
     let content_types = content_types::builder()
         .override_part("/word/document.xml", ct::DOC_MAIN)
         .override_part("/word/styles.xml", ct::STYLES)
+        .override_part("/word/numbering.xml", ct::NUMBERING)
         .override_part("/word/theme/theme1.xml", ct::THEME)
         .override_part("/word/settings.xml", ct::SETTINGS)
         .override_part("/word/webSettings.xml", ct::WEB_SETTINGS)
@@ -70,10 +72,11 @@ pub fn minimal_empty_doc() -> Result<Vec<u8>, DocxV2Error> {
 
     let doc_rels = rels::build(&[
         rels::Rel::new("rId1", rels::kind::STYLES, "styles.xml"),
-        rels::Rel::new("rId2", rels::kind::THEME, "theme/theme1.xml"),
-        rels::Rel::new("rId3", rels::kind::SETTINGS, "settings.xml"),
-        rels::Rel::new("rId4", rels::kind::WEB_SETTINGS, "webSettings.xml"),
-        rels::Rel::new("rId5", rels::kind::FONT_TABLE, "fontTable.xml"),
+        rels::Rel::new("rId2", rels::kind::NUMBERING, "numbering.xml"),
+        rels::Rel::new("rId3", rels::kind::THEME, "theme/theme1.xml"),
+        rels::Rel::new("rId4", rels::kind::SETTINGS, "settings.xml"),
+        rels::Rel::new("rId5", rels::kind::WEB_SETTINGS, "webSettings.xml"),
+        rels::Rel::new("rId6", rels::kind::FONT_TABLE, "fontTable.xml"),
     ]);
 
     let mut pkg = Package::new();
@@ -82,6 +85,7 @@ pub fn minimal_empty_doc() -> Result<Vec<u8>, DocxV2Error> {
     pkg.add_text("word/_rels/document.xml.rels", doc_rels);
     pkg.add_text("word/document.xml", document::minimal());
     pkg.add_text("word/styles.xml", styles::styles());
+    pkg.add_text("word/numbering.xml", numbering::numbering());
     pkg.add_text("word/theme/theme1.xml", theme::theme1());
     pkg.add_text("word/settings.xml", settings::settings());
     pkg.add_text("word/webSettings.xml", web_settings::web_settings());

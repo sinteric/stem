@@ -191,3 +191,38 @@ fn empty_doc_styles_part_has_canonical_set() {
     let doc_rels = read_entry(&bytes, "word/_rels/document.xml.rels");
     assert!(doc_rels.contains(r#"Target="styles.xml""#));
 }
+
+#[test]
+fn empty_doc_numbering_part_has_three_lists() {
+    let bytes = export_empty();
+    let n = read_entry(&bytes, "word/numbering.xml");
+
+    // Three abstractNum + three num entries (ordered/bullet/heading).
+    assert_eq!(n.matches("<w:abstractNum ").count(), 3);
+    assert_eq!(n.matches("<w:num ").count(), 3);
+
+    // Heading multilevel links to Heading1..Heading6.
+    for level in 1..=6 {
+        assert!(
+            n.contains(&format!(r#"<w:pStyle w:val="Heading{level}"/>"#)),
+            "missing heading link for level {level}"
+        );
+    }
+
+    // Within the first <w:lvl> the children are in canonical
+    // order: start → numFmt → lvlText → lvlJc → pPr.
+    let first = n.find("<w:lvl ").unwrap();
+    let end = n[first..].find("</w:lvl>").unwrap() + first;
+    let block = &n[first..end];
+    let start = block.find("<w:start").unwrap();
+    let numfmt = block.find("<w:numFmt").unwrap();
+    let lvltext = block.find("<w:lvlText").unwrap();
+    let lvljc = block.find("<w:lvlJc").unwrap();
+    let ppr = block.find("<w:pPr>").unwrap();
+    assert!(start < numfmt && numfmt < lvltext && lvltext < lvljc && lvljc < ppr);
+
+    let ct = read_entry(&bytes, "[Content_Types].xml");
+    assert!(ct.contains("/word/numbering.xml"));
+    let doc_rels = read_entry(&bytes, "word/_rels/document.xml.rels");
+    assert!(doc_rels.contains(r#"Target="numbering.xml""#));
+}
