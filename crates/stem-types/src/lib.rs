@@ -18,3 +18,11 @@ pub use schema::{
     ValueKind,
 };
 pub use validator::validate;
+
+/// Highest heading level the document type defines (`h1`..`h<MAX>`).
+/// Element files `crates/stem-types/src/elements/heading.rs` declare
+/// exactly this many heading constants; the docx exporter's TOC
+/// instruction and the `Heading1..N` style registration both pin to
+/// this number so any future widening to e.g. `h7` is a single-place
+/// change.
+pub const MAX_HEADING_LEVEL: usize = 6;

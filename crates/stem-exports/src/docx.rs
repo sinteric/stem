@@ -14,8 +14,8 @@ use docx_rs::{
     AbstractNumbering, AlignmentType, BorderType, Docx, FieldCharType, Footer, Footnote, Header,
     Hyperlink, HyperlinkType, IndentLevel, InstrNUMPAGES, InstrPAGE, InstrText, Level, LevelJc,
     LevelText, NumberFormat, Numbering, NumberingId, PageMargin, PageOrientationType, Paragraph,
-    Pic, Run, RunFonts, Shading, SpecialIndentType, Start, Table, TableBorder, TableBorders,
-    TableCell, TableOfContents, TableRow, VAlignType, VMergeType,
+    Pic, Run, RunFonts, Shading, SpecialIndentType, Start, Style, StyleType, Table, TableBorder,
+    TableBorders, TableCell, TableOfContents, TableRow, VAlignType, VMergeType,
 };
 use stem_core::ast::{Block, Body, Document, TextPiece};
 use stem_core::theme::Theme;
@@ -71,6 +71,14 @@ impl Exporter for DocxExporter {
             .add_numbering(Numbering::new(1, 1))
             .add_abstract_numbering(abstract_numbering(2, true))
             .add_numbering(Numbering::new(2, 2));
+
+        // Register the paragraph + character styles we reference from
+        // the document body. docx-rs's default styles.xml only
+        // defines `Normal` and `ToC1..6`, so Word can't apply
+        // `Heading1`/`Caption`/`Hyperlink` etc. without these
+        // explicit definitions — and the TOC field's heading scan
+        // relies on the `outlineLvl` set here.
+        out = register_styles(out);
 
         let ctx = EmitCtx {
             theme,
@@ -149,6 +157,28 @@ fn emit_block(docx: Docx, b: &Block, ctx: &EmitCtx, _depth: usize) -> Result<Doc
     })
 }
 
+/// Parse the optional `levels` property on `section[id:toc]`. Accepts
+/// `"start-end"` (e.g. `1-3`) or a single value `"N"` meaning `1-N`.
+/// Falls back to the full range supported by the schema. Out-of-range
+/// or malformed values silently fall back too — the TOC is best-effort
+/// metadata, not load-bearing structure.
+fn parse_toc_levels(spec: Option<&str>) -> (usize, usize) {
+    let max = stem_types::MAX_HEADING_LEVEL;
+    let Some(s) = spec else { return (1, max) };
+    let s = s.trim();
+    if let Some((lo, hi)) = s.split_once('-') {
+        let lo = lo.trim().parse::<usize>().ok().unwrap_or(1);
+        let hi = hi.trim().parse::<usize>().ok().unwrap_or(max);
+        let lo = lo.clamp(1, max);
+        let hi = hi.clamp(lo, max);
+        return (lo, hi);
+    }
+    if let Ok(n) = s.parse::<usize>() {
+        return (1, n.clamp(1, max));
+    }
+    (1, max)
+}
+
 /// Render a `section[id:..]` block. The reserved id `toc` (see
 /// `docs/schema.md` §2 `section.reserved[id:toc]`) emits an
 /// auto-generated table of contents field that Word will populate when
@@ -158,12 +188,33 @@ fn emit_block(docx: Docx, b: &Block, ctx: &EmitCtx, _depth: usize) -> Result<Doc
 fn emit_section(docx: Docx, b: &Block, ctx: &EmitCtx) -> Result<Docx, DocxError> {
     let id = b.prop_str("id");
     if id == Some("toc") {
-        // TOC field; switches: \o "1-3" (heading range), \h (hyperlinks),
-        // \z (hide tab leader in web view), \u (use applied paragraph
-        // outline level). Marking it `dirty` tells Word to refresh on
-        // open so the user sees a populated list, not the empty
-        // placeholder.
-        let toc = TableOfContents::new().heading_styles_range(1, 6).hyperlink().dirty();
+        // TOC field matching what Word's "Insert > Table of Contents >
+        // Automatic" produces. Switches:
+        //   \o "start-end"  include heading range (default full
+        //                   1..MAX_HEADING_LEVEL; overridable via
+        //                   `levels` property).
+        //   \h              every entry is a hyperlink (clickable).
+        //   \z              hide tab leader and page numbers in Web
+        //                   layout view.
+        //   \u              use applied paragraph outline level — lets
+        //                   the field rely on the `outlineLvl` set in
+        //                   register_styles rather than per-paragraph
+        //                   numPr.
+        // `dirty` triggers Word to refresh the field on open. We drop
+        // the SDT wrapper to match the BoringCrypto reference and
+        // avoid Word's content-controls dialog.
+        // docx-rs's TableOfContents builder doesn't surface \u or \z,
+        // so we hand-build the instruction text via `with_instr_text`.
+        let (start, end) = parse_toc_levels(b.prop_str("levels"));
+        let instr = format!(" TOC \\o \"{}-{}\" \\h \\z \\u ", start, end);
+        let toc = TableOfContents::with_instr_text(&instr)
+            .dirty()
+            .without_sdt()
+            .add_before_paragraph(
+                Paragraph::new()
+                    .style("Heading1")
+                    .add_run(Run::new().add_text("Table of Contents")),
+            );
         return Ok(docx.add_table_of_contents(toc));
     }
     let mut docx = docx;
@@ -968,6 +1019,90 @@ fn split_length(s: &str) -> Option<(&str, &str)> {
         return None;
     }
     Some((num, unit))
+}
+
+// --- styles -------------------------------------------------------------
+
+/// Decreasing heading sizes, in OOXML half-points. Index 0 = `Heading1`.
+/// 36/32/28/26/24/22 hp = 18/16/14/13/12/11 pt; clamps at 22 hp for
+/// anything past the array.
+fn heading_size_half_points(level: usize) -> usize {
+    const SIZES: &[usize] = &[36, 32, 28, 26, 24, 22];
+    *SIZES
+        .get(level.saturating_sub(1))
+        .unwrap_or_else(|| SIZES.last().expect("SIZES is non-empty"))
+}
+
+
+/// Define the paragraph + character styles we reference by ID from the
+/// body. Without these, Word may render the document but features
+/// that look up styles by ID — most importantly the TOC field, which
+/// scans for `outlineLvl` on heading styles — silently produce no
+/// content.
+///
+/// Mirrors the subset of Word's built-in style names so a third-party
+/// docx reader that ships its own defaults still picks up reasonable
+/// formatting.
+fn register_styles(mut docx: Docx) -> Docx {
+    // Heading1..N with outline levels 0..N-1. The level cap comes from
+    // `stem_types::MAX_HEADING_LEVEL` so this stays in sync with the
+    // h1..hN element definitions and the default TOC heading range.
+    // Sizes step from 36pt down to 22pt in half-point units.
+    for level in 1..=stem_types::MAX_HEADING_LEVEL {
+        let size_hp = heading_size_half_points(level);
+        let style = Style::new(format!("Heading{}", level), StyleType::Paragraph)
+            .name(format!("heading {}", level))
+            .based_on("Normal")
+            .next("Normal")
+            .q_format(true)
+            .ui_priority(9)
+            .outline_lvl(level - 1)
+            .bold()
+            .size(size_hp);
+        docx = docx.add_style(style);
+    }
+
+    // Title: typically used on the cover page; larger than Heading1.
+    let title = Style::new("Title", StyleType::Paragraph)
+        .name("Title")
+        .based_on("Normal")
+        .next("Normal")
+        .q_format(true)
+        .ui_priority(10)
+        .bold()
+        .size(56);
+    docx = docx.add_style(title);
+
+    // Caption — italic, slightly smaller. Word's built-in default
+    // looks similar.
+    let caption = Style::new("Caption", StyleType::Paragraph)
+        .name("caption")
+        .based_on("Normal")
+        .next("Normal")
+        .q_format(true)
+        .ui_priority(35)
+        .italic()
+        .size(18);
+    docx = docx.add_style(caption);
+
+    // Hyperlink: blue + underlined character style applied to runs
+    // inside <w:hyperlink>. Without this, the hyperlink visually
+    // looks like plain text.
+    let hyperlink = Style::new("Hyperlink", StyleType::Character)
+        .name("Hyperlink")
+        .ui_priority(99)
+        .color("0563C1")
+        .underline("single");
+    docx = docx.add_style(hyperlink);
+
+    // FootnoteReference: superscript marker character style.
+    let foot_ref = Style::new("FootnoteReference", StyleType::Character)
+        .name("footnote reference")
+        .ui_priority(99)
+        .size(16);
+    docx = docx.add_style(foot_ref);
+
+    docx
 }
 
 // --- list numbering definition ------------------------------------------

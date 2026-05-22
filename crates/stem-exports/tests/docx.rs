@@ -253,10 +253,20 @@ fn write_tiny_png(dir: &std::path::Path, name: &str) -> std::path::PathBuf {
     path
 }
 
+/// Unique per-test directory under temp_dir to avoid races when tests
+/// run in parallel and would otherwise share a single `tiny.png`.
+fn unique_tmp_dir(tag: &str) -> std::path::PathBuf {
+    use std::sync::atomic::{AtomicU64, Ordering};
+    static N: AtomicU64 = AtomicU64::new(0);
+    let n = N.fetch_add(1, Ordering::Relaxed);
+    let dir = std::env::temp_dir().join(format!("stem-docx-test-{}-{}", tag, n));
+    std::fs::create_dir_all(&dir).expect("mkdir tmp");
+    dir
+}
+
 #[test]
 fn image_block_embeds_drawing() {
-    let tmp = std::env::temp_dir().join("stem-docx-img-test");
-    std::fs::create_dir_all(&tmp).expect("mkdir");
+    let tmp = unique_tmp_dir("img");
     let png = write_tiny_png(&tmp, "tiny.png");
 
     let src = format!(
@@ -285,8 +295,7 @@ fn image_block_embeds_drawing() {
 
 #[test]
 fn image_with_caption_emits_caption_paragraph_below() {
-    let tmp = std::env::temp_dir().join("stem-docx-img-test");
-    std::fs::create_dir_all(&tmp).expect("mkdir");
+    let tmp = unique_tmp_dir("imgcap");
     let png = write_tiny_png(&tmp, "tiny.png");
 
     let src = format!(
@@ -308,8 +317,7 @@ fn image_with_caption_emits_caption_paragraph_below() {
 
 #[test]
 fn image_with_image_base_resolves_relative_path() {
-    let tmp = std::env::temp_dir().join("stem-docx-img-base-test");
-    std::fs::create_dir_all(&tmp).expect("mkdir");
+    let tmp = unique_tmp_dir("imgbase");
     write_tiny_png(&tmp, "rel.png");
 
     let src = r#"image[src:"rel.png", alt:"relative"]"#;
@@ -475,6 +483,41 @@ fn footer_with_page_number_emits_page_field() {
     assert!(footer_xml.contains("w:fldChar"), "expected fldChar markers: {}", footer_xml);
 }
 
+// --- styles.xml registration (TOC bugfix) -------------------------------
+
+#[test]
+fn styles_xml_defines_heading_styles_with_outline_level() {
+    let bytes = docx_bytes_from_stem("h1(Chapter)\n\nh2(Section)\n");
+    let reader = std::io::Cursor::new(&bytes);
+    let mut zip = zip::ZipArchive::new(reader).expect("zip");
+    let mut styles_xml = String::new();
+    zip.by_name("word/styles.xml")
+        .expect("styles.xml present")
+        .read_to_string(&mut styles_xml)
+        .expect("read");
+    // Each Heading1..6 must be defined; TOC field's heading scan needs
+    // outlineLvl on these to find entries.
+    for level in 1..=6 {
+        let id = format!("w:styleId=\"Heading{}\"", level);
+        assert!(
+            styles_xml.contains(&id),
+            "expected styles.xml to define Heading{}: {}",
+            level,
+            &styles_xml[..styles_xml.len().min(2000)]
+        );
+    }
+    // outlineLvl 0 corresponds to Heading1 (0-indexed) — without it
+    // Word's TOC field finds nothing even when paragraphs reference
+    // the style by name.
+    assert!(
+        styles_xml.contains("<w:outlineLvl w:val=\"0\""),
+        "expected outlineLvl=0 for Heading1: {}",
+        &styles_xml[..styles_xml.len().min(2000)]
+    );
+    assert!(styles_xml.contains("w:styleId=\"Caption\""));
+    assert!(styles_xml.contains("w:styleId=\"Hyperlink\""));
+}
+
 // --- TOC + sections (stage 5) -------------------------------------------
 
 #[test]
@@ -483,16 +526,58 @@ fn section_id_toc_emits_table_of_contents() {
         "h1(Document)\n\nsection[id:toc]\n\nh1(Chapter 1)\nh2(Section A)\n",
     );
     let xml = extract_document_xml(&bytes);
-    // The TOC field is identified by its instrText "TOC \o ..." or by
-    // the StructuredDataTag wrapper docx-rs uses.
+    // Bare (no sdt wrapper) field with all four switches Word's
+    // automatic TOC uses. The \u + outlineLvl in styles.xml is what
+    // makes Word actually find headings to populate.
+    assert!(xml.contains("TOC "), "expected TOC field: {}", xml);
+    assert!(xml.contains("\\o"), "expected heading-range switch \\o");
+    assert!(xml.contains("\\h"), "expected hyperlink switch \\h");
+    assert!(xml.contains("\\u"), "expected outline-level switch \\u");
+    assert!(xml.contains("\\z"), "expected hide-in-web switch \\z");
     assert!(
-        xml.contains("TOC ") || xml.contains("<w:sdt"),
-        "expected TOC field or sdt wrapper: {}",
+        xml.contains("w:dirty=\"true\""),
+        "expected dirty=true so Word refreshes on open: {}",
         xml
     );
+    // Word should NOT wrap the TOC in <w:sdt> — that triggers
+    // content-control prompts. We use without_sdt() to drop it.
+    assert!(!xml.contains("<w:sdt"), "TOC should not be wrapped in sdt: {}", xml);
+}
+
+#[test]
+fn toc_levels_default_matches_max_heading_level() {
+    let bytes = docx_bytes_from_stem("section[id:toc]");
+    let xml = extract_document_xml(&bytes);
+    // Default range pins to stem_types::MAX_HEADING_LEVEL — currently 6.
+    let expected = format!("1-{}", stem_types::MAX_HEADING_LEVEL);
     assert!(
-        xml.contains("\\o") || xml.contains("heading"),
-        "expected heading range switch: {}",
+        xml.contains(&format!("\\o &quot;{}&quot;", expected))
+            || xml.contains(&format!("\\o \"{}\"", expected)),
+        "expected TOC range {}: {}",
+        expected,
+        xml
+    );
+}
+
+#[test]
+fn toc_levels_property_overrides_default_range() {
+    let bytes = docx_bytes_from_stem("section[id:toc, levels:\"1-3\"]");
+    let xml = extract_document_xml(&bytes);
+    assert!(
+        xml.contains("\\o &quot;1-3&quot;") || xml.contains("\\o \"1-3\""),
+        "expected explicit 1-3 range: {}",
+        xml
+    );
+    assert!(!xml.contains("1-6"), "default range should be overridden: {}", xml);
+}
+
+#[test]
+fn toc_levels_single_value_becomes_one_to_n() {
+    let bytes = docx_bytes_from_stem("section[id:toc, levels:4]");
+    let xml = extract_document_xml(&bytes);
+    assert!(
+        xml.contains("\\o &quot;1-4&quot;") || xml.contains("\\o \"1-4\""),
+        "single levels value should be treated as upper bound: {}",
         xml
     );
 }
