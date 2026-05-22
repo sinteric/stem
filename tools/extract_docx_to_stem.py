@@ -161,10 +161,27 @@ def table_to_stem(tbl, caption=None, indent=0):
             if vmerge_val == 'continue':
                 # Our exporter synthesizes these. Don't emit.
                 continue
+            # Detect cell alignment: walk paragraphs inside the cell
+            # and find the dominant <w:jc> value. Cells with a uniform
+            # centered align are common for numeric/N-A columns.
+            jc_vals = set()
+            for p_in in tc.iter(W+'p'):
+                jc = p_in.find(W+'pPr/'+W+'jc')
+                if jc is not None:
+                    jc_vals.add(jc.get(W+'val'))
+                else:
+                    jc_vals.add('left')  # default
+            align = None
+            if jc_vals == {'center'}:
+                align = 'center'
+            elif jc_vals == {'right'}:
+                align = 'right'
             txt = cell_text(tc)
             cprops = []
             if colspan > 1:
                 cprops.append(f'colspan:{colspan}')
+            if align:
+                cprops.append(f'align:{align}')
             # Detect rowspan by walking subsequent rows for vMerge=continue
             # at the same grid position (best-effort: count consecutive).
             # The OOXML data doesn't give us a direct rowspan, so we leave

@@ -111,56 +111,56 @@ h1[numbered:true](FIPS 140-2 Security Levels)
 p(The following table lists the level of validation for each area in FIPS 140-2:)
 table[border:all, caption:"Validation Level by FIPS 140-2 Section"]{
   row[kind:header]{
-    cell(FIPS 140-2 Section Title)
-    cell(Validation Level)
+    cell[align:center](FIPS 140-2 Section Title)
+    cell[align:center](Validation Level)
   }
   row{
     cell(Cryptographic Module Specification)
-    cell(1)
+    cell[align:center](1)
   }
   row{
     cell(Cryptographic Module Ports and Interfaces)
-    cell(1)
+    cell[align:center](1)
   }
   row{
     cell(Roles, Services, and Authentication)
-    cell(1)
+    cell[align:center](1)
   }
   row{
     cell(Finite State Model)
-    cell(1)
+    cell[align:center](1)
   }
   row{
     cell(Physical Security)
-    cell(N/A)
+    cell[align:center](N/A)
   }
   row{
     cell(Operational Environment)
-    cell(1)
+    cell[align:center](1)
   }
   row{
     cell(Cryptographic Key Management)
-    cell(1)
+    cell[align:center](1)
   }
   row{
     cell(Electromagnetic Interference / Electromagnetic Compatibility)
-    cell(1)
+    cell[align:center](1)
   }
   row{
     cell(Self-Tests)
-    cell(1)
+    cell[align:center](1)
   }
   row{
     cell(Design Assurance)
-    cell(1)
+    cell[align:center](1)
   }
   row{
     cell(Mitigation of Other Attacks)
-    cell(N/A)
+    cell[align:center](N/A)
   }
   row{
     cell(Overall Level)
-    cell(1)
+    cell[align:center](1)
   }
 }
 pagebreak
@@ -178,9 +178,9 @@ h1[numbered:true](Cryptographic Module Ports and Interfaces)
 p(The Data Input interface consists of the input parameters of the API functions. The Data Output interface consists of the output parameters of the API functions. The Control Input interface consists of the actual API input parameters. The Status Output interface includes the return values of the API functions.)
 table[border:all, caption:"Ports and Interfaces"]{
   row[kind:header]{
-    cell(FIPS Interface)
-    cell(Physical Ports)
-    cell(Logical Interfaces)
+    cell[align:center](FIPS Interface)
+    cell[align:center](Physical Ports)
+    cell[align:center](Logical Interfaces)
   }
   row{
     cell(Data Input)
@@ -215,161 +215,161 @@ p("The cryptographic module implements both User and Crypto Officer \\(CO\\) rol
 p(The Approved services supported by the module and access rights within services accessible over the module’s public interface are listed in the table below.)
 table[border:all, caption:"Approved Services, Roles and Access Rights"]{
   row[kind:header]{
-    cell(Service)
-    cell(Approved security functions)
-    cell(Keys and/or CSPs)
-    cell(Roles)
-    cell(Access rights to keys and/or CSPs)
+    cell[align:center](Service)
+    cell[align:center](Approved security functions)
+    cell[align:center](Keys and/or CSPs)
+    cell[align:center](Roles)
+    cell[align:center](Access rights to keys and/or CSPs)
   }
   row{
     cell(Module Initialization)
-    cell(N/A)
-    cell(N/A)
-    cell(CO)
-    cell(N/A)
+    cell[align:center](N/A)
+    cell[align:center](N/A)
+    cell[align:center](CO)
+    cell[align:center](N/A)
   }
   row{
     cell(Symmetric encryption/decryption)
-    cell(AES, T riple- DES)
-    cell(AES , T riple- DES symmetric keys)
-    cell(User, CO)
-    cell(Execute)
+    cell[align:center](AES, T riple- DES)
+    cell[align:center](AES , T riple- DES symmetric keys)
+    cell[align:center](User, CO)
+    cell[align:center](Execute)
   }
   row{
     cell(Keyed hashing)
-    cell(HMAC-SHA)
-    cell(HMAC key)
-    cell(User, CO)
-    cell(Execute)
+    cell[align:center](HMAC-SHA)
+    cell[align:center](HMAC key)
+    cell[align:center](User, CO)
+    cell[align:center](Execute)
   }
   row{
     cell(Hashing)
-    cell(SHS)
-    cell(None)
-    cell(User, CO)
-    cell(N/A)
+    cell[align:center](SHS)
+    cell[align:center](None)
+    cell[align:center](User, CO)
+    cell[align:center](N/A)
   }
   row{
     cell(Random Bit Generation)
-    cell(CTR_DRBG)
-    cell(DRBG seed, internal state V and Key values)
-    cell(User, CO)
-    cell(Write/Execute)
+    cell[align:center](CTR_DRBG)
+    cell[align:center](DRBG seed, internal state V and Key values)
+    cell[align:center](User, CO)
+    cell[align:center](Write/Execute)
   }
   row{
     cell(Signature g eneration / verification)
-    cell(CTR_DRBG RSA ECDSA)
-    cell(RSA, ECDSA private key)
-    cell(User, CO)
-    cell(Write/Execute)
+    cell[align:center](CTR_DRBG RSA ECDSA)
+    cell[align:center](RSA, ECDSA private key)
+    cell[align:center](User, CO)
+    cell[align:center](Write/Execute)
   }
   row{
     cell(Key Transport)
-    cell(RSA)
-    cell(RSA private key)
-    cell(User, CO)
-    cell(Write/Execute)
+    cell[align:center](RSA)
+    cell[align:center](RSA private key)
+    cell[align:center](User, CO)
+    cell[align:center](Write/Execute)
   }
   row{
     cell(Key Agreement)
-    cell(KAS ECC)
-    cell(EC DH private key)
-    cell(User, CO)
-    cell(Write/Execute)
+    cell[align:center](KAS ECC)
+    cell[align:center](EC DH private key)
+    cell[align:center](User, CO)
+    cell[align:center](Write/Execute)
   }
   row{
     cell(Key Generation)
-    cell(CTR_DRBG RSA ECDSA)
-    cell(RSA, ECDSA private key)
-    cell(User, CO)
-    cell(Write/Execute)
+    cell[align:center](CTR_DRBG RSA ECDSA)
+    cell[align:center](RSA, ECDSA private key)
+    cell[align:center](User, CO)
+    cell[align:center](Write/Execute)
   }
   row{
     cell(On-Demand Self-test)
-    cell(None)
-    cell(None)
-    cell(User, CO)
-    cell(Execute)
+    cell[align:center](None)
+    cell[align:center](None)
+    cell[align:center](User, CO)
+    cell[align:center](Execute)
   }
   row{
     cell(Zeroization)
-    cell(None)
-    cell(All keys)
-    cell(User, CO)
-    cell(Write/Execute)
+    cell[align:center](None)
+    cell[align:center](All keys)
+    cell[align:center](User, CO)
+    cell[align:center](Write/Execute)
   }
   row{
     cell(Show status)
-    cell(None)
-    cell(None)
-    cell(User, CO)
-    cell(N/A)
+    cell[align:center](None)
+    cell[align:center](None)
+    cell[align:center](User, CO)
+    cell[align:center](N/A)
   }
 }
 p(The module provides the following non-Approved services which utilize algorithms listed in Table 9:)
 table[border:all, caption:"non-Approved or non-security relevant services"]{
   row[kind:header]{
-    cell(Service)
-    cell(Non-Approved Functions)
-    cell(Roles)
-    cell(Keys and/or CSPs)
+    cell[align:center](Service)
+    cell[align:center](Non-Approved Functions)
+    cell[align:center](Roles)
+    cell[align:center](Keys and/or CSPs)
   }
   row{
     cell(Symmetric encryption/decryption)
-    cell(AES \(non-compliant\) , DES, T riple- DES \(non-compliant\))
-    cell(User, CO)
-    cell(N/A)
+    cell[align:center](AES \(non-compliant\) , DES, T riple- DES \(non-compliant\))
+    cell[align:center](User, CO)
+    cell[align:center](N/A)
   }
   row{
     cell(Hashing)
-    cell(MD4, MD5, POLYVAL)
-    cell(User, CO)
-    cell(N/A)
+    cell[align:center](MD4, MD5, POLYVAL)
+    cell[align:center](User, CO)
+    cell[align:center](N/A)
   }
   row{
     cell(Signature generation/ verification)
-    cell(RSA \(non-compliant\) ECDSA \(non-compliant\))
-    cell(User, CO)
-    cell(N/A)
+    cell[align:center](RSA \(non-compliant\) ECDSA \(non-compliant\))
+    cell[align:center](User, CO)
+    cell[align:center](N/A)
   }
   row{
     cell(Key Transport)
-    cell(RSA \(non-compliant\))
-    cell(User, CO)
-    cell(N/A)
+    cell[align:center](RSA \(non-compliant\))
+    cell[align:center](User, CO)
+    cell[align:center](N/A)
   }
   row{
     cell(Key Generation)
-    cell(RSA \(non-compliant\) ECDSA \(non-compliant\))
-    cell(User, CO)
-    cell(N/A)
+    cell[align:center](RSA \(non-compliant\) ECDSA \(non-compliant\))
+    cell[align:center](User, CO)
+    cell[align:center](N/A)
   }
 }
 p(The module also provides the following non-Approved or non-security relevant services over a non-public interface:)
 table[border:all, caption:"Non-Security Relevant Services"]{
   row[kind:header]{
-    cell(Service)
-    cell(Approved Security Functions)
-    cell(Roles)
-    cell(Access rights to keys and/or CSPs)
+    cell[align:center](Service)
+    cell[align:center](Approved Security Functions)
+    cell[align:center](Roles)
+    cell[align:center](Access rights to keys and/or CSPs)
   }
   row{
     cell(Large integer operations)
-    cell(None)
-    cell(User, CO)
-    cell(N/A)
+    cell[align:center](None)
+    cell[align:center](User, CO)
+    cell[align:center](N/A)
   }
   row{
     cell(Disable automatic generation of CTR_DRB G "additional_input" parameter")
-    cell(CTR_DRBG)
-    cell(User, CO)
-    cell(N/A)
+    cell[align:center](CTR_DRBG)
+    cell[align:center](User, CO)
+    cell[align:center](N/A)
   }
   row{
     cell(Wegman-Carter hashing with POLYVAL)
-    cell(None)
-    cell(User, CO)
-    cell(N/A)
+    cell[align:center](None)
+    cell[align:center](User, CO)
+    cell[align:center](N/A)
   }
 }
 h1[numbered:true](Physical Security)
@@ -382,88 +382,88 @@ h2[numbered:true](Approved Cryptographic Algorithms)
 p(The module implements the following FIPS 140-2 Approved algorithms:)
 table[border:all, caption:"Approved Algorithms and CAVP Certificates"]{
   row[kind:header]{
-    cell(CAVP Cert #)
-    cell(Algorithm)
-    cell(Standard)
-    cell(Mode/Method)
-    cell(Use)
+    cell[align:center](CAVP Cert #)
+    cell[align:center](Algorithm)
+    cell[align:center](Standard)
+    cell[align:center](Mode/Method)
+    cell[align:center](Use)
   }
   row{
-    cell(5612)
-    cell(AES)
-    cell(SP 800-38A FIPS 197 SP 800-38F)
-    cell(128, 192, 256 CBC, ECB, CTR, GCM)
-    cell(Encryption, Decryption , Authentication)
+    cell[align:center](5612)
+    cell[align:center](AES)
+    cell[align:center](SP 800-38A FIPS 197 SP 800-38F)
+    cell[align:center](128, 192, 256 CBC, ECB, CTR, GCM)
+    cell[align:center](Encryption, Decryption , Authentication)
   }
   row{
-    cell(5612)
-    cell(KTS)
-    cell(SP 800-38 F)
-    cell(KW)
-    cell(Key Wrapping, Key Unwrapping,)
+    cell[align:center](5612)
+    cell[align:center](KTS)
+    cell[align:center](SP 800-38 F)
+    cell[align:center](KW)
+    cell[align:center](Key Wrapping, Key Unwrapping,)
   }
   row{
-    cell(2 035)
-    cell(CVL)
-    cell(SP 800-135 rev1)
-    cell(TLS 1.0/1.1 and 1.2 KDF)
-    cell(Key Derivation)
+    cell[align:center](2 035)
+    cell[align:center](CVL)
+    cell[align:center](SP 800-135 rev1)
+    cell[align:center](TLS 1.0/1.1 and 1.2 KDF)
+    cell[align:center](Key Derivation)
   }
   row{
-    cell(Vendor Affirmed)
-    cell(CKG)
-    cell(SP 800-133)
-    cell(Cryptographic Key Generation)
-    cell(Key Generation)
+    cell[align:center](Vendor Affirmed)
+    cell[align:center](CKG)
+    cell[align:center](SP 800-133)
+    cell[align:center](Cryptographic Key Generation)
+    cell[align:center](Key Generation)
   }
   row{
-    cell(2253)
-    cell(DRBG)
-    cell(SP 800-90Arev1)
-    cell(AES-256 CTR_DRBG)
-    cell(Random Bit Generation)
+    cell[align:center](2253)
+    cell[align:center](DRBG)
+    cell[align:center](SP 800-90Arev1)
+    cell[align:center](AES-256 CTR_DRBG)
+    cell[align:center](Random Bit Generation)
   }
   row{
-    cell(1520 \( CVL \) 2034)
-    cell(ECDSA)
-    cell(FIPS 186-4)
-    cell(Signature Generation Component, Key Pair Generation, Signature Generation, Signature Verification, Public Key Validation P-224, P-256, P-384, P-512)
-    cell(Digital Signature Services)
+    cell[align:center](1520 \( CVL \) 2034)
+    cell[align:center](ECDSA)
+    cell[align:center](FIPS 186-4)
+    cell[align:center](Signature Generation Component, Key Pair Generation, Signature Generation, Signature Verification, Public Key Validation P-224, P-256, P-384, P-512)
+    cell[align:center](Digital Signature Services)
   }
   row{
-    cell(3743)
-    cell(HMAC)
-    cell(FIPS 198-1)
-    cell(HMAC- SHA-1, HMAC- SHA-224, HMAC- SHA-256, HMAC- SHA-384, HMAC- SHA-512)
-    cell(Generation, Authentication)
+    cell[align:center](3743)
+    cell[align:center](HMAC)
+    cell[align:center](FIPS 198-1)
+    cell[align:center](HMAC- SHA-1, HMAC- SHA-224, HMAC- SHA-256, HMAC- SHA-384, HMAC- SHA-512)
+    cell[align:center](Generation, Authentication)
   }
   row{
-    cell(20 33)
-    cell(KAS ECC \(CVL\))
-    cell(SP 8 00-56A)
-    cell(Ephemeral Unified)
-    cell(Key agreement scheme)
+    cell[align:center](20 33)
+    cell[align:center](KAS ECC \(CVL\))
+    cell[align:center](SP 8 00-56A)
+    cell[align:center](Ephemeral Unified)
+    cell[align:center](Key agreement scheme)
   }
   row{
-    cell(3020)
-    cell(RSA)
-    cell(FIPS 186-4)
-    cell(Key Generation, Signature Generation, Signature Verification \(1024, 2048, 3072\) Note: Key size 1024 is only used for Signature Verification)
-    cell(Digital Signature Services)
+    cell[align:center](3020)
+    cell[align:center](RSA)
+    cell[align:center](FIPS 186-4)
+    cell[align:center](Key Generation, Signature Generation, Signature Verification \(1024, 2048, 3072\) Note: Key size 1024 is only used for Signature Verification)
+    cell[align:center](Digital Signature Services)
   }
   row{
-    cell(4509)
-    cell(SHA)
-    cell(FIPS 180-4)
-    cell(SHA-1, SHA-224, SHA-256, SHA-384, SHA-512)
-    cell(Digital Signature Generation, Digital Signature Verification, non-Digital Signature Applications)
+    cell[align:center](4509)
+    cell[align:center](SHA)
+    cell[align:center](FIPS 180-4)
+    cell[align:center](SHA-1, SHA-224, SHA-256, SHA-384, SHA-512)
+    cell[align:center](Digital Signature Generation, Digital Signature Verification, non-Digital Signature Applications)
   }
   row{
-    cell(2825)
-    cell(Triple-DES)
-    cell(SP 800-67 SP 800-38A)
-    cell(TCBC, TECB)
-    cell(Encryption, Decryption)
+    cell[align:center](2825)
+    cell[align:center](Triple-DES)
+    cell[align:center](SP 800-67 SP 800-38A)
+    cell[align:center](TCBC, TECB)
+    cell[align:center](Encryption, Decryption)
   }
 }
 p()
@@ -766,8 +766,8 @@ h1[numbered:true](References and Standards)
 p(The following Standards are referred to in this Security Policy.)
 table[border:all, caption:"References and Standards"]{
   row[kind:header]{
-    cell(Abbreviation)
-    cell(Full Specification Name)
+    cell[align:center](Abbreviation)
+    cell[align:center](Full Specification Name)
   }
   row{
     cell(FIPS 140-2)
@@ -821,8 +821,8 @@ table[border:all, caption:"References and Standards"]{
 h1[numbered:true](Acronyms and Definitions)
 table[border:all, caption:"Acronyms and Definitions"]{
   row[kind:header]{
-    cell(Acronym)
-    cell(Definition)
+    cell[align:center](Acronym)
+    cell[align:center](Definition)
   }
   row{
     cell(AES)
