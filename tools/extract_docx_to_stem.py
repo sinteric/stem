@@ -258,11 +258,8 @@ def emit_paragraph(p, caption_consumes=False):
         # Inline page break → emit pagebreak marker.
         if page_break_run is not None:
             return ['pagebreak']
-        # Otherwise an empty paragraph — preserve it for spacing.
-        # (skip if it's a Caption with no text, which is just SEQ chrome)
-        if (sty == 'Caption') or any(it.text and 'SEQ' in it.text
-                                     for it in p.iter(W+'instrText')):
-            return []
+        # SEQ-only empty paragraphs (e.g. caption number placeholders
+        # with no descriptive text) preserve for spacing too.
         return ['p()']
 
     # Decide stem element from style.
