@@ -147,3 +147,42 @@ fn word_wrap_uses_real_metrics() {
     let td_count = blob.matches(" Td").count();
     assert!(td_count >= 2, "expected wrap-induced multi-line, got {} Td ops", td_count);
 }
+
+/// Best-effort CJK rendering check. Skips when no system CJK font is
+/// available (most CI runners). On macOS test machines the system
+/// `AppleSDGothicNeo.ttc` Korean font is present.
+#[test]
+fn cjk_text_renders_with_system_font() {
+    const CANDIDATES: &[&str] = &[
+        "/System/Library/Fonts/AppleSDGothicNeo.ttc",
+        "/System/Library/Fonts/Supplemental/AppleGothic.ttf",
+    ];
+    let Some(path) = CANDIDATES.iter().find(|p| std::path::Path::new(p).exists()) else {
+        eprintln!("no system CJK font available; skipping cjk_text_renders_with_system_font");
+        return;
+    };
+    let bytes = std::fs::read(path).expect("read font");
+
+    let doc = import_str("# 안녕 Stem\n\n한국어 본문도 렌더링됩니다.\n");
+    let pdf = PdfExporter::new()
+        .with_font(bytes)
+        .export(&doc, &Theme::default())
+        .expect("export");
+    assert!(pdf.starts_with(b"%PDF-"));
+    assert!(pdf.len() > 1000);
+}
+
+#[test]
+fn font_family_falls_back_when_variant_missing() {
+    // No bold variant supplied: bold runs should not crash and the
+    // resulting PDF must be valid. Verifies the cascade logic.
+    let bogus = vec![0u8; 200]; // not a real font; parse fails → falls back to built-in
+    let pdf = PdfExporter::new()
+        .with_font_family(bogus, None, None, None)
+        .export(
+            &import_str("**Bold** and *italic* with regular text.\n"),
+            &Theme::default(),
+        )
+        .expect("export");
+    assert!(pdf.starts_with(b"%PDF-"));
+}

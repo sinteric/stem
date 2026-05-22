@@ -16,17 +16,39 @@
 //! ## Custom fonts (CJK and others)
 //!
 //! Built-in PDF base-14 fonts cover Latin-1 only. To render CJK or any
-//! non-Latin text, the embedder must supply font bytes:
+//! other non-Latin text, the embedder must supply font bytes.
+//!
+//! The simplest path is one font for everything:
 //!
 //! ```ignore
 //! let bytes = std::fs::read("/path/to/NotoSansKR-Regular.ttf")?;
 //! let exporter = PdfExporter::new().with_font(bytes);
-//! let pdf = exporter.export(&doc, &theme)?;
 //! ```
 //!
-//! When a custom font is configured, every text run uses it — italic
-//! and bold styling are dropped because we don't have weight/italic
-//! variants. A future API may accept a font family with variants.
+//! For documents that use bold or italic emphasis, pass a full family
+//! so heading weight survives:
+//!
+//! ```ignore
+//! let exporter = PdfExporter::new().with_font_family(
+//!     std::fs::read("NotoSansKR-Regular.ttf")?,
+//!     Some(std::fs::read("NotoSansKR-Bold.ttf")?),
+//!     None, // no italic for many CJK fonts; falls back to regular
+//!     None,
+//! );
+//! ```
+//!
+//! Load fonts however the embedder prefers — the simplest pattern is
+//! `std::fs::read(path)?` at the call site:
+//!
+//! ```ignore
+//! let exporter = PdfExporter::new().with_font(std::fs::read(path)?);
+//! ```
+//!
+//! Where to get a font: any open TTF/OTF works. Common choices for
+//! Korean: Noto Sans KR (Google Fonts), NanumGothic (Naver), Pretendard.
+//! For pan-CJK: Noto Sans CJK (much larger). System fonts on macOS like
+//! `/System/Library/Fonts/AppleSDGothicNeo.ttc` also work (printpdf
+//! reads font index 0 from a TTC).
 //!
 //! Out of scope: images, tables, sheets, links, footnotes, headers/
 //! footers, hyphenation, justified text.
@@ -46,7 +68,15 @@ use thiserror::Error;
 /// to provide a font for non-Latin text (e.g. Noto Sans CJK).
 #[derive(Default)]
 pub struct PdfExporter {
-    body_font_bytes: Option<Vec<u8>>,
+    family: CustomFamily,
+}
+
+#[derive(Default, Clone)]
+struct CustomFamily {
+    regular: Option<Vec<u8>>,
+    bold: Option<Vec<u8>>,
+    italic: Option<Vec<u8>>,
+    bold_italic: Option<Vec<u8>>,
 }
 
 impl PdfExporter {
@@ -54,15 +84,39 @@ impl PdfExporter {
         Self::default()
     }
 
-    /// Provide bytes for a TrueType font used for body, headings, and
-    /// inline runs. Required for any non-Latin text since the built-in
-    /// PDF base-14 fonts are Latin-1.
+    /// Use the given font for all body, heading, and inline text. The
+    /// font replaces the built-in Latin family entirely; without bold
+    /// or italic variants supplied separately (see
+    /// [`with_font_family`](Self::with_font_family)), runs marked bold
+    /// or italic fall back to the same regular font.
     ///
-    /// Drops italic/bold styling — supply variants via a future API.
+    /// Required for CJK or any other non-Latin text — the built-in PDF
+    /// base-14 fonts only cover Latin-1.
     pub fn with_font(mut self, bytes: Vec<u8>) -> Self {
-        self.body_font_bytes = Some(bytes);
+        self.family.regular = Some(bytes);
         self
     }
+
+    /// Provide a full font family. Optional variants null out to the
+    /// regular font (so a CJK font with no italic still renders italic
+    /// runs in the regular weight, instead of switching to the built-in
+    /// Helvetica which lacks CJK glyphs).
+    pub fn with_font_family(
+        mut self,
+        regular: Vec<u8>,
+        bold: Option<Vec<u8>>,
+        italic: Option<Vec<u8>>,
+        bold_italic: Option<Vec<u8>>,
+    ) -> Self {
+        self.family = CustomFamily {
+            regular: Some(regular),
+            bold,
+            italic,
+            bold_italic,
+        };
+        self
+    }
+
 }
 
 #[derive(Debug, Error)]
@@ -80,13 +134,25 @@ impl Exporter for PdfExporter {
 
         let mut pdf = PdfDocument::new(title);
 
-        // Parse fonts once. ParsedFont gives us metrics for real word
-        // wrap (glyph widths) and a FontId for embedding when custom.
-        let custom_font: Option<ParsedFont> = self
-            .body_font_bytes
-            .as_ref()
-            .and_then(|b| ParsedFont::from_bytes(b, 0, &mut Vec::new()));
-        let custom_font_id: Option<FontId> = custom_font.as_ref().map(|f| pdf.add_font(f));
+        // Parse each custom variant once. ParsedFont gives us metrics
+        // for real word wrap (glyph widths) and a FontId for embedding.
+        let parse_variant = |bytes: &Option<Vec<u8>>| -> Option<ParsedFont> {
+            bytes
+                .as_ref()
+                .and_then(|b| ParsedFont::from_bytes(b, 0, &mut Vec::new()))
+        };
+        let custom_regular = parse_variant(&self.family.regular);
+        let custom_bold = parse_variant(&self.family.bold);
+        let custom_italic = parse_variant(&self.family.italic);
+        let custom_bold_italic = parse_variant(&self.family.bold_italic);
+
+        let mut add_id = |f: &Option<ParsedFont>| -> Option<FontId> {
+            f.as_ref().map(|p| pdf.add_font(p))
+        };
+        let custom_regular_id = add_id(&custom_regular);
+        let custom_bold_id = add_id(&custom_bold);
+        let custom_italic_id = add_id(&custom_italic);
+        let custom_bold_italic_id = add_id(&custom_bold_italic);
 
         let helvetica = BuiltinFont::Helvetica.get_parsed_font();
         let helvetica_bold = BuiltinFont::HelveticaBold.get_parsed_font();
@@ -94,8 +160,14 @@ impl Exporter for PdfExporter {
         let courier = BuiltinFont::Courier.get_parsed_font();
 
         let fonts = Fonts {
-            custom: custom_font.as_ref(),
-            custom_id: custom_font_id.as_ref(),
+            custom_regular: custom_regular.as_ref(),
+            custom_regular_id: custom_regular_id.as_ref(),
+            custom_bold: custom_bold.as_ref(),
+            custom_bold_id: custom_bold_id.as_ref(),
+            custom_italic: custom_italic.as_ref(),
+            custom_italic_id: custom_italic_id.as_ref(),
+            custom_bold_italic: custom_bold_italic.as_ref(),
+            custom_bold_italic_id: custom_bold_italic_id.as_ref(),
             helvetica: helvetica.as_ref(),
             helvetica_bold: helvetica_bold.as_ref(),
             helvetica_oblique: helvetica_oblique.as_ref(),
@@ -146,8 +218,14 @@ enum FontRole {
 
 #[derive(Clone, Copy)]
 struct Fonts<'a> {
-    custom: Option<&'a ParsedFont>,
-    custom_id: Option<&'a FontId>,
+    custom_regular: Option<&'a ParsedFont>,
+    custom_regular_id: Option<&'a FontId>,
+    custom_bold: Option<&'a ParsedFont>,
+    custom_bold_id: Option<&'a FontId>,
+    custom_italic: Option<&'a ParsedFont>,
+    custom_italic_id: Option<&'a FontId>,
+    custom_bold_italic: Option<&'a ParsedFont>,
+    custom_bold_italic_id: Option<&'a FontId>,
     helvetica: Option<&'a ParsedFont>,
     helvetica_bold: Option<&'a ParsedFont>,
     helvetica_oblique: Option<&'a ParsedFont>,
@@ -155,12 +233,45 @@ struct Fonts<'a> {
 }
 
 impl<'a> Fonts<'a> {
-    /// Resolve a FontRole to the actual font handle and its metrics.
-    /// When a custom font is configured, every role uses it — we don't
-    /// have variants for the custom font.
+    /// Resolve a FontRole to (handle, metrics). The cascade for a
+    /// custom family is:
+    ///   role-specific variant → regular variant → built-in equivalent
+    ///
+    /// So a CJK font with no italic still renders italic runs in the
+    /// regular CJK weight (rather than switching to Helvetica which
+    /// has no CJK glyphs). Code/Monospace always uses Courier — there
+    /// is no monospace variant in the custom-family API by design.
     fn resolve(&self, role: FontRole) -> (PdfFontHandle, Option<&'a ParsedFont>) {
-        if let Some(id) = self.custom_id {
-            return (PdfFontHandle::External(id.clone()), self.custom);
+        if role == FontRole::Monospace {
+            return (
+                PdfFontHandle::Builtin(BuiltinFont::Courier),
+                self.courier,
+            );
+        }
+        let custom = match role {
+            FontRole::Body => (self.custom_regular_id, self.custom_regular),
+            FontRole::Bold => (
+                self.custom_bold_id.or(self.custom_regular_id),
+                self.custom_bold.or(self.custom_regular),
+            ),
+            FontRole::Italic => (
+                self.custom_italic_id.or(self.custom_regular_id),
+                self.custom_italic.or(self.custom_regular),
+            ),
+            FontRole::BoldItalic => (
+                self.custom_bold_italic_id
+                    .or(self.custom_bold_id)
+                    .or(self.custom_italic_id)
+                    .or(self.custom_regular_id),
+                self.custom_bold_italic
+                    .or(self.custom_bold)
+                    .or(self.custom_italic)
+                    .or(self.custom_regular),
+            ),
+            FontRole::Monospace => unreachable!(),
+        };
+        if let (Some(id), parsed) = custom {
+            return (PdfFontHandle::External(id.clone()), parsed);
         }
         match role {
             FontRole::Body => (
@@ -179,10 +290,7 @@ impl<'a> Fonts<'a> {
                 PdfFontHandle::Builtin(BuiltinFont::HelveticaBoldOblique),
                 self.helvetica_bold, // metrics close enough for wrap
             ),
-            FontRole::Monospace => (
-                PdfFontHandle::Builtin(BuiltinFont::Courier),
-                self.courier,
-            ),
+            FontRole::Monospace => unreachable!(),
         }
     }
 }
