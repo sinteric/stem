@@ -168,19 +168,19 @@ fn table_bg_resolves_named_theme_color() {
 }
 
 #[test]
-fn table_caption_appears_before_table_with_auto_seq() {
+fn table_caption_appears_below_table_with_auto_seq() {
     let bytes = docx_bytes_from_stem(r#"table[caption:"FIPS sections"]{ row{ cell(x) } }"#);
     let xml = extract_document_xml(&bytes);
     let caption_pos = xml.find("FIPS sections").expect("caption text present");
     let tbl_pos = xml.find("<w:tbl>").expect("table present");
-    assert!(caption_pos < tbl_pos, "caption should precede table");
+    // Tables follow academic + BoringCrypto reference convention: the
+    // caption sits BELOW the table.
+    assert!(caption_pos > tbl_pos, "caption should follow table; tbl={} cap={}", tbl_pos, caption_pos);
     assert!(
         xml.contains("w:pStyle w:val=\"Caption\""),
         "caption should use Caption style: {}",
         xml
     );
-    // Auto-numbering: caption emits a SEQ Table field, prefixed with
-    // the literal "Table " label.
     assert!(xml.contains("SEQ Table"), "expected SEQ Table field: {}", xml);
     assert!(
         xml.contains(">Table <"),

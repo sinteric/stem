@@ -177,6 +177,7 @@ fn emit_block(docx: Docx, b: &Block, ctx: &EmitCtx, _depth: usize) -> Result<Doc
         "table" => emit_table(docx, b, ctx.theme),
         "image" => emit_image(docx, b, ctx)?,
         "section" => emit_section(docx, b, ctx)?,
+        "title" => docx.add_paragraph(title_para(b)),
         _ => docx.add_paragraph(text_para(b, None)),
     })
 }
@@ -248,6 +249,19 @@ fn emit_section(docx: Docx, b: &Block, ctx: &EmitCtx) -> Result<Docx, DocxError>
         }
     }
     Ok(docx)
+}
+
+fn title_para(b: &Block) -> Paragraph {
+    let mut p = Paragraph::new().style("Title");
+    if let Some(align) = b.prop_str("align") {
+        if let Some(a) = parse_alignment(align) {
+            p = p.align(a);
+        }
+    } else {
+        // Match Word's default Title style which is centered.
+        p = p.align(AlignmentType::Center);
+    }
+    apply_pieces(p, collect_pieces(b, RunStyle::default()))
 }
 
 fn heading_para(b: &Block, level: u8) -> Paragraph {
@@ -476,13 +490,18 @@ fn emit_table(docx: Docx, b: &Block, theme: &Theme) -> Docx {
     let stripe = b.prop_str("stripe").map(|v| v == "true").unwrap_or(false);
 
     let mut docx = docx;
-    if let Some(caption) = b.prop_str("caption") {
-        docx = docx.add_paragraph(caption_paragraph(CaptionKind::Table, caption));
-    }
+    let caption_text = b.prop_str("caption").map(str::to_string);
 
     let rows = match &b.body {
         Body::Children(c) => c.as_slice(),
-        _ => return docx,
+        _ => {
+            // Empty table — still emit the caption (if any) so the
+            // SEQ counter advances per source declaration.
+            if let Some(c) = caption_text {
+                docx = docx.add_paragraph(caption_paragraph(CaptionKind::Table, &c));
+            }
+            return docx;
+        }
     };
 
     // Track per-column remaining rowspan so that a `cell[rowspan:N]` in
@@ -508,7 +527,14 @@ fn emit_table(docx: Docx, b: &Block, theme: &Theme) -> Docx {
 
     let table = apply_table_borders(Table::new(table_rows), border_mode)
         .layout(docx_rs::TableLayoutType::Autofit);
-    docx.add_table(table)
+    let mut docx = docx.add_table(table);
+    // Caption is rendered BELOW the table (matches academic style and
+    // the BoringCrypto FIPS reference). Images keep the same below
+    // convention.
+    if let Some(c) = caption_text {
+        docx = docx.add_paragraph(caption_paragraph(CaptionKind::Table, &c));
+    }
+    docx
 }
 
 #[derive(Clone, Copy)]

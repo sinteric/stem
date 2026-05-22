@@ -1,0 +1,880 @@
+[page-size:letter, margin:1in]
+
+title(Google Inc.)
+title(BoringCrypto)
+title(FIPS 140-2 Security Policy)
+title(Software version:)
+title(66005f41fbc3529ffe8d007708756720529da20d)
+title(Date: October 25th, 2018)
+image[src:"references/docx/.extracted/boringcrypto_extract/assets/image_rId8.png", alt:"figure"]
+
+section[id:toc]
+
+h1(Introduction)
+p("Federal Information Processing Standards Publication 140-2 — Security Requirements for Cryptographic Modules specifies requirements for cryptographic modules to be deployed in a Sensitive but Unclassified environment. The National Institute of Standards and Technology \\(NIST\\) and Communications Security Establishment Canada \\(CSE\\) Cryptographic Module Validation Program \\(CMVP\\) run the FIPS 140 program. The NVLAP accredits independent testing labs to perform FIPS 140 testing; the CMVP validates modules meeting FIPS 140 validation. Validated is the term given to a module that is documented and tested against the FIPS 140 criteria.")
+p("More information is available on the CMVP website at: @link[to:\"http://csrc.nist.gov/groups/STM/cmvp/index.html\"](http://csrc.nist.gov/groups/STM/cmvp/index.html).")
+h1(About this Document)
+p(This non-proprietary Cryptographic Module Security Policy for BoringCrypto from Google Inc. provides an overview of the product and a high-level description of how it meets the overall Level 1 security requirements of FIPS 140-2.)
+p(BoringCrypto module may also be referred to as the “module” in this document.)
+h1(Disclaimer)
+p(The contents of this document are subject to revision without notice due to continued progress in methodology, design, and manufacturing. Google Inc. shall have no liability for any error or damages of any kind resulting from the use of this document.)
+p(The software referenced in this document is licensed to you under the terms and conditions accompanying the software or as otherwise agreed between you or the company that you are representing.)
+h1(Notices)
+p(This document may be freely reproduced and distributed in its entirety without modification.)
+h1[numbered:true](Introduction)
+p("Google Inc. BoringCrypto module \\(hereafter referred to as the “module”\\) is an open-source, general-purpose cryptographic library which provides FIPS 140-2 approved cryptographic algorithms to serve BoringSSL and other user-space applications. The validated version of the library is 66005f41fbc3529ffe8d007708756720529da20d. For the purposes of the FIPS 140-2 validation, its embodiment type is defined as multi-chip standalone.")
+p("The cryptographic module was tested on the following operational environments on the general-purpose computer \\(GPC\\) platforms detailed below:")
+table[border:all, caption:"Tested Operational Environments"]{
+  row[kind:header]{
+    cell(#)
+    cell(Operational Environment)
+    cell(Processor Family)
+    cell(Compiler)
+  }
+  row{
+    cell(1)
+    cell(Debian Linux 4.9.0 \(Rodete\))
+    cell(Intel Xeon E5 -2680 \(with PAA\))
+    cell(Clang \( 6.0.1 \))
+  }
+  row{
+    cell(2)
+    cell(Debian Linux 4.9.0 \(Rodete\))
+    cell(Intel Xeon E5-2680 \(without PAA\))
+    cell(Clang \(6.0.1\))
+  }
+  row{
+    cell(3)
+    cell(Ubuntu Linux 1 8 .04)
+    cell(POWER 9 \(wit h PAA\))
+    cell(Clang \(6.0.1\))
+  }
+  row{
+    cell(4)
+    cell(Ubuntu Linux 1 8 .04)
+    cell(POWER 9 \(without PAA\))
+    cell(Clang \(6.0.1\))
+  }
+}
+p(The cryptographic module is also supported on the following operating environments for which operational testing and algorithm testing was not performed:)
+p(Linux 4.X executing on x86_64 architecture; and)
+p(Linux 4.X executing on POWER9 architecture.)
+p(As per FIPS 140-2 Implementation Guidance G.5, compliance is maintained for other versions of the respective operational environments where the module binary is unchanged. No claim can be made as to the correct operation of the module or the security strengths of the generated keys if any source code is changed and the module binary is reconstructed.)
+p("The GPC\\(s\\) used during testing met Federal Communications Commission \\(FCC\\) FCC Electromagnetic Interference \\(EMI\\) and Electromagnetic Compatibility \\(EMC\\) requirements for business use as defined by 47 Code of Federal Regulations, Part 15, Subpart B. FIPS 140-2 validation compliance is maintained when the module is operated on other versions of the GPOS running in single user mode, assuming that the requirements outlined in NIST IG G.5 are met.")
+p(The CMVP makes no statement as to the correct operation of the module or the security strengths of the generated keys when so ported if the specific operational environment is not listed on the validation certificate.)
+h1[numbered:true](FIPS 140-2 Security Levels)
+p(The following table lists the level of validation for each area in FIPS 140-2:)
+table[border:all, caption:"Validation Level by FIPS 140-2 Section"]{
+  row[kind:header]{
+    cell(FIPS 140-2 Section Title)
+    cell(Validation Level)
+  }
+  row{
+    cell(Cryptographic Module Specification)
+    cell(1)
+  }
+  row{
+    cell(Cryptographic Module Ports and Interfaces)
+    cell(1)
+  }
+  row{
+    cell(Roles, Services, and Authentication)
+    cell(1)
+  }
+  row{
+    cell(Finite State Model)
+    cell(1)
+  }
+  row{
+    cell(Physical Security)
+    cell(N/A)
+  }
+  row{
+    cell(Operational Environment)
+    cell(1)
+  }
+  row{
+    cell(Cryptographic Key Management)
+    cell(1)
+  }
+  row{
+    cell(Electromagnetic Interference / Electromagnetic Compatibility)
+    cell(1)
+  }
+  row{
+    cell(Self-Tests)
+    cell(1)
+  }
+  row{
+    cell(Design Assurance)
+    cell(1)
+  }
+  row{
+    cell(Mitigation of Other Attacks)
+    cell(N/A)
+  }
+  row{
+    cell(Overall Level)
+    cell(1)
+  }
+}
+h1[numbered:true](Cryptographic Module Specification)
+h2[numbered:true](Cryptographic Boundary)
+p("The module is a software library providing a C-language application program interface \\(API\\) for use by other processes that require cryptographic functionality. All operations of the module occur via calls from host applications and their respective internal daemons/processes. As such there are no untrusted services calling the services of the module.")
+p("The physical cryptographic boundary is the general-purpose computer on which the module is installed. The logical cryptographic boundary of the BoringCrypto module is a single object file named bcm.o which is statically linked to BoringSSL. The module performs no communications other than with the calling application \\(the process that invokes the module services\\) and the host operating system.")
+p(Figure 1 shows the logical relationship of the cryptographic module to the other software and hardware components of the computer.)
+image[src:"references/docx/.extracted/boringcrypto_extract/assets/image_rId10.png", alt:"figure", caption:"Logical Boundary"]
+h1[numbered:true](Modes of Operation)
+p(The module supports two modes of operation: Approved and Non-approved. The module will be in FIPS-approved mode when all power up self-tests have completed successfully, and only Approved algorithms are invoked.  See Table 7 below for a list of the supported Approved algorithms and Table 8 for allowed algorithms.  The non-Approved mode is entered when a non-Approved algorithm is invoked.  See Table 9 for a list of non-Approved algorithms.)
+h1[numbered:true](Cryptographic Module Ports and Interfaces)
+p(The Data Input interface consists of the input parameters of the API functions. The Data Output interface consists of the output parameters of the API functions. The Control Input interface consists of the actual API input parameters. The Status Output interface includes the return values of the API functions.)
+table[border:all, caption:"Ports and Interfaces"]{
+  row[kind:header]{
+    cell(FIPS Interface)
+    cell(Physical Ports)
+    cell(Logical Interfaces)
+  }
+  row{
+    cell(Data Input)
+    cell(Physical ports of the tested platforms)
+    cell(API input parameters)
+  }
+  row{
+    cell(Data Output)
+    cell(Physical ports of the tested platforms)
+    cell(API output parameters and return values)
+  }
+  row{
+    cell(Control Input)
+    cell(Physical ports of the tested platforms)
+    cell(API input parameters)
+  }
+  row{
+    cell(Status Output)
+    cell(Physical ports of the tested platforms)
+    cell(API return values)
+  }
+  row{
+    cell(Power Input)
+    cell(Physical ports of the tested platforms)
+    cell(N/A)
+  }
+}
+p(As a software module, control of the physical ports is outside module scope. However, when the module is performing self-tests, or is in an error state, all output on the module’s logical data output interfaces is inhibited.)
+h1[numbered:true](Roles, Authentication and Services)
+p("The cryptographic module implements both User and Crypto Officer \\(CO\\) roles. The module does not support user authentication. The User and CO roles are implicitly assumed by the entity accessing services implemented by the module. A user is considered the owner of the thread that instantiates the module and, therefore, only one concurrent user is allowed.")
+p(The Approved services supported by the module and access rights within services accessible over the module’s public interface are listed in the table below.)
+table[border:all, caption:"Approved Services, Roles and Access Rights"]{
+  row[kind:header]{
+    cell(Service)
+    cell(Approved security functions)
+    cell(Keys and/or CSPs)
+    cell(Roles)
+    cell(Access rights to keys and/or CSPs)
+  }
+  row{
+    cell(Module Initialization)
+    cell(N/A)
+    cell(N/A)
+    cell(CO)
+    cell(N/A)
+  }
+  row{
+    cell(Symmetric encryption/decryption)
+    cell(AES, T riple- DES)
+    cell(AES , T riple- DES symmetric keys)
+    cell(User, CO)
+    cell(Execute)
+  }
+  row{
+    cell(Keyed hashing)
+    cell(HMAC-SHA)
+    cell(HMAC key)
+    cell(User, CO)
+    cell(Execute)
+  }
+  row{
+    cell(Hashing)
+    cell(SHS)
+    cell(None)
+    cell(User, CO)
+    cell(N/A)
+  }
+  row{
+    cell(Random Bit Generation)
+    cell(CTR_DRBG)
+    cell(DRBG seed, internal state V and Key values)
+    cell(User, CO)
+    cell(Write/Execute)
+  }
+  row{
+    cell(Signature g eneration / verification)
+    cell(CTR_DRBG RSA ECDSA)
+    cell(RSA, ECDSA private key)
+    cell(User, CO)
+    cell(Write/Execute)
+  }
+  row{
+    cell(Key Transport)
+    cell(RSA)
+    cell(RSA private key)
+    cell(User, CO)
+    cell(Write/Execute)
+  }
+  row{
+    cell(Key Agreement)
+    cell(KAS ECC)
+    cell(EC DH private key)
+    cell(User, CO)
+    cell(Write/Execute)
+  }
+  row{
+    cell(Key Generation)
+    cell(CTR_DRBG RSA ECDSA)
+    cell(RSA, ECDSA private key)
+    cell(User, CO)
+    cell(Write/Execute)
+  }
+  row{
+    cell(On-Demand Self-test)
+    cell(None)
+    cell(None)
+    cell(User, CO)
+    cell(Execute)
+  }
+  row{
+    cell(Zeroization)
+    cell(None)
+    cell(All keys)
+    cell(User, CO)
+    cell(Write/Execute)
+  }
+  row{
+    cell(Show status)
+    cell(None)
+    cell(None)
+    cell(User, CO)
+    cell(N/A)
+  }
+}
+p(The module provides the following non-Approved services which utilize algorithms listed in Table 9:)
+table[border:all, caption:"non-Approved or non-security relevant services"]{
+  row[kind:header]{
+    cell(Service)
+    cell(Non-Approved Functions)
+    cell(Roles)
+    cell(Keys and/or CSPs)
+  }
+  row{
+    cell(Symmetric encryption/decryption)
+    cell(AES \(non-compliant\) , DES, T riple- DES \(non-compliant\))
+    cell(User, CO)
+    cell(N/A)
+  }
+  row{
+    cell(Hashing)
+    cell(MD4, MD5, POLYVAL)
+    cell(User, CO)
+    cell(N/A)
+  }
+  row{
+    cell(Signature generation/ verification)
+    cell(RSA \(non-compliant\) ECDSA \(non-compliant\))
+    cell(User, CO)
+    cell(N/A)
+  }
+  row{
+    cell(Key Transport)
+    cell(RSA \(non-compliant\))
+    cell(User, CO)
+    cell(N/A)
+  }
+  row{
+    cell(Key Generation)
+    cell(RSA \(non-compliant\) ECDSA \(non-compliant\))
+    cell(User, CO)
+    cell(N/A)
+  }
+}
+p(The module also provides the following non-Approved or non-security relevant services over a non-public interface:)
+table[border:all, caption:"Non-Security Relevant Services"]{
+  row[kind:header]{
+    cell(Service)
+    cell(Approved Security Functions)
+    cell(Roles)
+    cell(Access rights to keys and/or CSPs)
+  }
+  row{
+    cell(Large integer operations)
+    cell(None)
+    cell(User, CO)
+    cell(N/A)
+  }
+  row{
+    cell(Disable automatic generation of CTR_DRB G "additional_input" parameter")
+    cell(CTR_DRBG)
+    cell(User, CO)
+    cell(N/A)
+  }
+  row{
+    cell(Wegman-Carter hashing with POLYVAL)
+    cell(None)
+    cell(User, CO)
+    cell(N/A)
+  }
+}
+h1[numbered:true](Physical Security)
+p(The cryptographic module is comprised of software only and thus does not claim any physical security.)
+h1[numbered:true](Operational Environment)
+p(The cryptographic module operates under Ubuntu Linux 18.04 and Debian Linux 4.9.0. The module runs on a GPC running one of the operating systems specified in Table 1. Each approved operating system manages processes and threads in a logically separated manner. The module’s user is considered the owner of the calling application that instantiates the module.)
+h1[numbered:true](Cryptographic Algorithms & Key Management)
+h2[numbered:true](Approved Cryptographic Algorithms)
+p(The module implements the following FIPS 140-2 Approved algorithms:)
+table[border:all, caption:"Approved Algorithms and CAVP Certificates"]{
+  row[kind:header]{
+    cell(CAVP Cert #)
+    cell(Algorithm)
+    cell(Standard)
+    cell(Mode/Method)
+    cell(Use)
+  }
+  row{
+    cell(5612)
+    cell(AES)
+    cell(SP 800-38A FIPS 197 SP 800-38F)
+    cell(128, 192, 256 CBC, ECB, CTR, GCM)
+    cell(Encryption, Decryption , Authentication)
+  }
+  row{
+    cell(5612)
+    cell(KTS)
+    cell(SP 800-38 F)
+    cell(KW)
+    cell(Key Wrapping, Key Unwrapping,)
+  }
+  row{
+    cell(2 035)
+    cell(CVL)
+    cell(SP 800-135 rev1)
+    cell(TLS 1.0/1.1 and 1.2 KDF)
+    cell(Key Derivation)
+  }
+  row{
+    cell(Vendor Affirmed)
+    cell(CKG)
+    cell(SP 800-133)
+    cell(Cryptographic Key Generation)
+    cell(Key Generation)
+  }
+  row{
+    cell(2253)
+    cell(DRBG)
+    cell(SP 800-90Arev1)
+    cell(AES-256 CTR_DRBG)
+    cell(Random Bit Generation)
+  }
+  row{
+    cell(1520 \( CVL \) 2034)
+    cell(ECDSA)
+    cell(FIPS 186-4)
+    cell(Signature Generation Component, Key Pair Generation, Signature Generation, Signature Verification, Public Key Validation P-224, P-256, P-384, P-512)
+    cell(Digital Signature Services)
+  }
+  row{
+    cell(3743)
+    cell(HMAC)
+    cell(FIPS 198-1)
+    cell(HMAC- SHA-1, HMAC- SHA-224, HMAC- SHA-256, HMAC- SHA-384, HMAC- SHA-512)
+    cell(Generation, Authentication)
+  }
+  row{
+    cell(20 33)
+    cell(KAS ECC \(CVL\))
+    cell(SP 8 00-56A)
+    cell(Ephemeral Unified)
+    cell(Key agreement scheme)
+  }
+  row{
+    cell(3020)
+    cell(RSA)
+    cell(FIPS 186-4)
+    cell(Key Generation, Signature Generation, Signature Verification \(1024, 2048, 3072\) Note: Key size 1024 is only used for Signature Verification)
+    cell(Digital Signature Services)
+  }
+  row{
+    cell(4509)
+    cell(SHA)
+    cell(FIPS 180-4)
+    cell(SHA-1, SHA-224, SHA-256, SHA-384, SHA-512)
+    cell(Digital Signature Generation, Digital Signature Verification, non-Digital Signature Applications)
+  }
+  row{
+    cell(2825)
+    cell(Triple-DES)
+    cell(SP 800-67 SP 800-38A)
+    cell(TCBC, TECB)
+    cell(Encryption, Decryption)
+  }
+}
+h2[numbered:true](Allowed Cryptographic Algorithms)
+p(The module supports the following non-FIPS 140-2 Approved but allowed algorithms that may be used in the Approved mode of operation.)
+table[border:all, caption:"Allowed Algorithms"]{
+  row[kind:header]{
+    cell(Algorithm)
+    cell(Use)
+  }
+  row{
+    cell(EC Diffie-Hellman)
+    cell(CVL Certs. # 203 3 and # 203 4 ; key agreement; key establishment methodology provides between 112 and 256 bits of encryption strength)
+  }
+  row{
+    cell(RSA Key Transport)
+    cell(K ey establishment methodology provides between 112 and 256 bits of encryption strength)
+  }
+  row{
+    cell(MD5)
+    cell(When used with the TLS protocol version 1.0 and 1.1)
+  }
+  row{
+    cell(NDRNG)
+    cell(Used only to seed the Approved DRBG)
+  }
+}
+h2[numbered:true](Non-Approved Cryptographic Algorithms)
+p(The module employs the methods listed in Table 9, which are not allowed for use in a FIPS-Approved mode. Their use will result in the module operating in a non-Approved mode.)
+table[border:all, caption:"Non-Approved Algorithms"]{
+  row[kind:header]{
+    cell(MD5 , MD4)
+    cell(DES)
+  }
+  row{
+    cell(AES-GCM \(non-compliant\))
+    cell(AES \(non-compliant\))
+  }
+  row{
+    cell(ECDSA \(non-compliant\))
+    cell(RSA \(non-compliant\))
+  }
+  row{
+    cell(POLYVAL)
+    cell(Triple-DES \(non-compliant\))
+  }
+}
+h2[numbered:true](Cryptographic Key Management)
+p(The table below provides a complete list of Private Keys and CSPs used by the module:)
+table[border:all, caption:"Keys and CSPs supported"]{
+  row[kind:header]{
+    cell(Key/CSP Name)
+    cell(Key Description)
+    cell(Generated/ Input)
+    cell(Output)
+  }
+  row{
+    cell(AES Key)
+    cell(AES \(128/192/256\) encrypt / decrypt key)
+    cell(Input via API in plaintext)
+    cell(Output via API in plaintext)
+  }
+  row{
+    cell(AES-GCM Key)
+    cell(AES \(128/192/256\) encrypt / decrypt / generate / verify key)
+    cell(Input via API in plaintext)
+    cell(Output via API in plaintext)
+  }
+  row{
+    cell(A ES Wrapping Key)
+    cell(AES \(128/192/256\) key wrapping key)
+    cell(Input via API in plaintext)
+    cell(Output via API in plaintext)
+  }
+  row{
+    cell(Triple-DES Key)
+    cell(Triple-DES \(3-Key\) encrypt / decrypt key)
+    cell(Input via API in plaintext)
+    cell(Output via API in plaintext)
+  }
+  row{
+    cell(ECDSA Signing Key)
+    cell(ECDSA \( P-224/P-256/P-384/ P-521 \) signature generation key)
+    cell(Internally Generated or input via API in plaintext)
+    cell(Output via API in plaintext)
+  }
+  row{
+    cell(EC DH Private Key)
+    cell(EC DH \( P-224/P-256/P-384/ P-521 \) private key)
+    cell(Internally Generated or input via API in plaintext)
+    cell(Output via API in plaintext)
+  }
+  row{
+    cell(HMAC Key)
+    cell(Keyed hash key \(160/224/256/384/512\))
+    cell(Input via API in plaintext)
+    cell(Output via API in plaintext)
+  }
+  row{
+    cell(RSA Key \(Key Transport\))
+    cell(RSA \(2048 to 16384 bits\) key decryption \(private key transport\) key)
+    cell(Internally Generated or input via API in plaintext)
+    cell(Output via API in plaintext)
+  }
+  row{
+    cell(RSA Signature Generation Key)
+    cell(RSA \(2048 to 16384 bits\) signature generation key)
+    cell(Internally Generated or input via API in plaintext)
+    cell(Output via API in plaintext)
+  }
+  row{
+    cell(TLS Master Secret)
+    cell(Shared Secret; 48 bytes of pseudo-random data)
+    cell(Internally Derived via key derivation function defined in SP 800-135 KDF \(TLS\).)
+    cell(Output via API in plaintext)
+  }
+  row{
+    cell(CTR_DRBG V \( Seed \))
+    cell(128 bits)
+    cell(Internally Generated)
+    cell(Does not exit the module)
+  }
+  row{
+    cell(CTR_DRBG Key)
+    cell(256 bits)
+    cell(Internally Generated)
+    cell(Does not exit the module)
+  }
+  row{
+    cell(CTR_DRBG Entropy Input)
+    cell(384 bits)
+    cell(Input via API in plaintext)
+    cell(Does not exit the module)
+  }
+}
+h2[numbered:true](Public Keys)
+p(The table below provides a complete list of the Public keys used by the module:)
+table[border:all, caption:"Public keys supported"]{
+  row[kind:header]{
+    cell(Public Key Name)
+    cell(Key Description)
+  }
+  row{
+    cell(ECDSA Verification Key)
+    cell(ECDSA \(P-224/P-256/P-384/ P-521 \) signature verification key)
+  }
+  row{
+    cell(EC DH Public Key)
+    cell(EC DH \(P-224/P-256/P-384/ P-521 \) public key)
+  }
+  row{
+    cell(RSA Key \(Key Transport\))
+    cell(RSA \(2048 to 16384 bits\) key encryption \(public key transport\) key)
+  }
+  row{
+    cell(RSA Signature Verification Key)
+    cell(RSA \(1024 to 16384 bits\) signature verification public key)
+  }
+}
+h2[numbered:true](Key Generation)
+p(The module supports generation of ECDSA, EC Diffie-Hellman and RSA key pairs as specified in Section 5 of NIST SP 800-133. The module employs a NIST SP 800-90A random bit generator for creation of the seed for asymmetric key generation. The module requests a minimum number of 128 bits of entropy from its Operational Environment per each call.)
+p(The output data path is provided by the data interfaces and is logically disconnected from processes performing key generation or zeroization. No key information will be output through the data output interface when the module zeroizes keys.)
+h2[numbered:true](Key Storage)
+p("The cryptographic module does not perform persistent storage of keys. Keys and CSPs are passed to the module by the calling application. The keys and CSPs are stored in memory in plaintext. Keys and CSPs residing in internally allocated data structures \\(during the lifetime of an API call\\) can only be accessed using the module defined API. The operating system protects memory and process space from unauthorized access.")
+h2[numbered:true](Key Zeroization)
+p(The module is passed keys as part of a function call from a calling application and does not store keys persistently. The calling application is responsible for parameters passed in and out of the module. The Operating System and the calling application are responsible to clean up temporary or ephemeral keys.)
+h1[numbered:true](Self-tests)
+p(FIPS 140-2 requires the module to perform self-tests to ensure the integrity of the module and the correctness of the cryptographic functionality at start up. Some functions require conditional tests during normal operation of the module. The supported tests are listed and described in this section.)
+h2[numbered:true](Power-On Self-Tests)
+p(Power-on self-tests are run upon the initialization of the module and do not require operator intervention to run. If any of the tests fail, the module will not initialize. The module will enter an error state and no services can be accessed.)
+p(The module implements the following power-on self-tests:)
+table[border:all, caption:"Power-on Self-tests"]{
+  row[kind:header]{
+    cell(Type)
+    cell(Test)
+  }
+  row{
+    cell(Integrity Test)
+    cell(HMAC-SHA-512)
+  }
+  row{
+    cell(Known Answer Test)
+    cell(AES KAT \(encryption and decryption. Key size: 128-bits\))
+  }
+  row{
+    cell(AES-GCM KAT \(encryption and decryption. Key size: 128-bits\))
+  }
+  row{
+    cell(Triple-DES KAT \(encryption and decryption. Key size: 168-bits\))
+  }
+  row{
+    cell(ECDSA KAT \(signature generation/signature verification. Curve: P-256\))
+  }
+  row{
+    cell(HMAC KAT \(HMAC-SHA-1, HMAC-SHA-512\))
+  }
+  row{
+    cell(SP 800-90A CTR_DRBG KAT \(Key size: 256-bits\))
+  }
+  row{
+    cell(RSA KAT \(signature generation/signature verification and encryption/decryption. Key size: 2048-bit\))
+  }
+  row{
+    cell(SHA KAT \(SHA-1, SHA-256, SHA-512\))
+  }
+}
+p(Each module performs all power-on self-tests automatically when the module is initialized. All power-on self-tests must be passed before a User/Crypto Officer can perform services. The Power-on self-tests can be run on demand by power-cycling the host platform.)
+h2[numbered:true](Conditional Self-Tests)
+p(Conditional self-tests are run during operation of the module.  If any of these tests fail, the module will enter an error state, where no services can be accessed by the operators. The module can be re-initialized to clear the error and resume FIPS mode of operation. Each module performs the following conditional self-tests:)
+table[border:all, caption:"Conditional Self-tests"]{
+  row[kind:header]{
+    cell(Type)
+    cell(Test)
+  }
+  row{
+    cell(Pair-wise Consistency Test)
+    cell(ECDSA Key P air generation RSA Key Pair generation)
+  }
+  row{
+    cell(CRNGT)
+    cell(Performed on NDRNG per IG 9.8)
+  }
+  row{
+    cell(DRBG Health Tests)
+    cell(Performed on DRBG, per SP 800‐90A Section 11.3. Required per IG C.1.)
+  }
+}
+p(Pairwise consistency tests are performed for both possible modes of use, e.g. Sign/Verify and Encrypt/Decrypt.)
+h1[numbered:true](Mitigation of other Attacks)
+p(The module is not designed to mitigate against attacks which are outside of the scope of FIPS 140-2.)
+h1[numbered:true](Guidance and Secure Operation)
+h2[numbered:true](Installation Instructions)
+p(The following steps shall be performed to build, compile and statically link the BoringCrypto module to BoringSSL on the tested Operational Environments. The cryptographic module)
+p(The below tools are required in order to build and compile the module:)
+p("Clang compiler version 6.0.1 \\(http://releases.llvm.org/download.html\\)")
+p("Go programming language version 1.10.3 \\(https://golang.org/dl/\\)")
+p("Ninja build system version 1.8.2 \\(https://github.com/ninja-build/ninja/releases\\)")
+p(Once the above tools have been obtained, issue the following command to create a CMake toolchain file to specify the use of Clang:)
+p("printf \"set\\(CMAKE_C_COMPILER \\\\\"clang\\\\\"\\)\\\\nset\\(CMAKE_CXX_COMPILER \\\\\"clang++\\\\\"\\)\\\\n\" > $\\{HOME\\}/toolchain")
+p(The FIPS 140-2 validated release of the module can be obtained by downloading the tarball containing the source code at the following location:)
+p(https://commondatastorage.googleapis.com/chromium-boringssl-docs/fips/boringssl-66005f41fbc3529ffe8d007708756720529da20d.tar.xz)
+p(or by issuing the following command:)
+p(wget https://commondatastorage.googleapis.com/chromium-boringssl-docs/fips/boringssl-66005f41fbc3529ffe8d007708756720529da20d.tar.xz)
+p(The set of files specified in the archive constitutes the complete set of source files of the validated module. There shall be no additions, deletions, or alterations of this set as used during module build.)
+p(The downloaded tarball file can be verified using the below SHA-256 digest value:)
+p(b12ad676ee533824f698741bd127f6fbc82c46344398a6d78d25e62c6c418c73)
+p(By issuing the following command:)
+p(sha256sum boringssl-66005f41fbc3529ffe8d007708756720529da20d.tar.xz)
+p(After the tarball has been extracted, the following commands will compile the module:)
+p(cd boringssl)
+p("mkdir build && cd build && cmake -GNinja -DCMAKE_TOOLCHAIN_FILE=$\\{HOME\\}/toolchain -DFIPS=1 -DCMAKE_BUILD_TYPE=Release ..")
+p(ninja)
+p(ninja run_tests)
+p(Upon completion of the build process. The module’s status can be verified by issuing:)
+p(./tool/bssl isfips)
+p(The module will print “1” if it is in a FIPS 140-2 validated mode of operation.)
+h2[numbered:true](Secure Operation)
+h3[numbered:true](Initialization)
+p("The cryptographic module is initialized by loading the module before any cryptographic functionality is available. In User Space the operating system is responsible for the initialization process and loading of the library. The module is designed with a default entry point \\(DEP\\) which ensures that the power-up tests are initiated automatically when the module is loaded.")
+h3[numbered:true](Usage of AES OFB, CFB and CFB8)
+p(In approved mode, users of the module must not utilize AES OFB, CFB and CFB8.)
+h3[numbered:true](Usage of AES-GCM)
+p(In the case of AES-GCM, the IV generation method is user selectable and the value can be computed in more than one manner.)
+p(Following RFC 5288 for TLS, the module ensures that it's strictly increasing and thus cannot repeat. When the IV exhausts the maximum number of possible values for a given session key, the first party, client or server, to encounter this condition may either trigger a handshake to establish a new encryption key in accordance with RFC 5246, or fail. In either case, the module prevents and IV duplication and thus enforces the security property.)
+p(The module’s IV is generated internally by the module’s Approved DRBG. The DRBG seed is generated inside the module’s physical boundary. The IV is 96-bits in length per NIST SP 800-38D, Section 8.2.2 and FIPS 140-2 IG A.5 scenario 2.)
+p(The selection of the IV construction method is the responsibility of the user of this cryptographic module. In approved mode, users of the module must not utilize GCM with an externally generated IV.)
+p(Per IG A.5, in the event module power is lost and restored the consuming application must ensure that any of its AES-GCM keys used for encryption or decryption are re-distributed.)
+h3[numbered:true](Usage of Triple-DES)
+p(In accordance with CMVP IG A.13, when operating in a FIPS approved mode of operation, the same Triple-DES key shall not be used to encrypt more than 220 or 216 64-bit data blocks.)
+p("The TLS protocol governs the generation of the respective Triple-DES keys. Please refer to IETF RFC 5246 \\(TLS\\) for details relevant to the generation of the individual Triple-DES encryption keys. The user is responsible for ensuring that the module limits the number of encrypted blocks with the same key to no more than 220 when utilized as part of a recognized IETF protocol.")
+p(For all other uses of Triple-DES the user is responsible for ensuring that the module limits the number of encrypted blocks with the same key to no more than 216.)
+h3[numbered:true](RSA and ECDSA Keys)
+p(The module allows the use of 1024 bits RSA keys for legacy purposes including signature generation, which is disallowed to be used in FIPS Approved mode as per NIST SP 800-131A. Therefore, the cryptographic operations with the non-approved key sizes will result in the module operating in non-Approved mode implicitly.)
+p(Approved algorithms shall not use the keys generated by the module’s non-Approved key generation methods.)
+h1[numbered:true](References and Standards)
+p(The following Standards are referred to in this Security Policy.)
+table[border:all, caption:"References and Standards"]{
+  row[kind:header]{
+    cell(Abbreviation)
+    cell(Full Specification Name)
+  }
+  row{
+    cell(FIPS 140-2)
+    cell(Security Requirements for Cryptographic modules, May 25 2001)
+  }
+  row{
+    cell(FIPS 180-4)
+    cell(Secure Hash Standard \(SHS\))
+  }
+  row{
+    cell(FIPS 186-4)
+    cell(Digital Signature Standard \(DSS\))
+  }
+  row{
+    cell(FIPS 197)
+    cell(Advanced Encryption Standard)
+  }
+  row{
+    cell(FIPS 198-1)
+    cell(The Keyed-Hash Message Authentication Code \(HMAC\))
+  }
+  row{
+    cell(IG)
+    cell(Implementation Guidance for FIPS PUB 140-2 and the Cryptographic Module Validation Program, January 11, 2016.)
+  }
+  row{
+    cell(SP 800-38A)
+    cell(Recommendation for Block Cipher Modes of Operation: Three Variants of Ciphertext Stealing for CBC Mode)
+  }
+  row{
+    cell(SP 800-38D)
+    cell(Recommendation for Block Cipher Modes of Operation: Galois/Counter Mode \(GCM\) and GMAC)
+  }
+  row{
+    cell(SP 800-38F)
+    cell(Recommendation for Block Cipher Modes of Operation: Methods for Key Wrapping)
+  }
+  row{
+    cell(SP 800-67)
+    cell(Recommendation for the Triple Data Encryption Algorithm \(TDEA\) Block Cipher)
+  }
+  row{
+    cell(SP 800-56A)
+    cell(Recommendation for Pair-Wise Key Establishment Schemes Using Discrete Logarithm Cryptography)
+  }
+  row{
+    cell(SP 800-90A)
+    cell(Recommendation for Random Number Generation Using Deterministic Random Bit Generators)
+  }
+}
+h1[numbered:true](Acronyms and Definitions)
+table[border:all, caption:"Acronyms and Definitions"]{
+  row[kind:header]{
+    cell(Acronym)
+    cell(Definition)
+  }
+  row{
+    cell(AES)
+    cell(Advanced Encryption Standard)
+  }
+  row{
+    cell(API)
+    cell(Application Programming Interface)
+  }
+  row{
+    cell(CBC)
+    cell(Cipher-Block Chaining)
+  }
+  row{
+    cell(CMAC)
+    cell(Cipher-based Message Authentication Code)
+  }
+  row{
+    cell(CMVP)
+    cell(Crypto Module Validation Program)
+  }
+  row{
+    cell(CO)
+    cell(Cryptographic Officer)
+  }
+  row{
+    cell(CPU)
+    cell(Central Processing Unit)
+  }
+  row{
+    cell(CSP)
+    cell(Critical Security Parameter)
+  }
+  row{
+    cell(CTR)
+    cell(Counter-mode)
+  }
+  row{
+    cell(CVL)
+    cell(Component Validation List)
+  }
+  row{
+    cell(DES)
+    cell(Data Encryption Standard)
+  }
+  row{
+    cell(DRAM)
+    cell(Dynamic Random Access Memory)
+  }
+  row{
+    cell(DRBG)
+    cell(Deterministic Random Bit Generator)
+  }
+  row{
+    cell(EC)
+    cell(Elliptic Curve)
+  }
+  row{
+    cell(ECB)
+    cell(Electronic Code Book)
+  }
+  row{
+    cell(EC DH)
+    cell(Elliptic Curve Diffie-Hellman)
+  }
+  row{
+    cell(ECDSA)
+    cell(Elliptic Curve Digital Signature Authority)
+  }
+  row{
+    cell(FIPS)
+    cell(Federal Information Processing Standards)
+  }
+  row{
+    cell(GCM)
+    cell(Galois/Counter Mode)
+  }
+  row{
+    cell(GPC)
+    cell(General Purpose Computer)
+  }
+  row{
+    cell(HMAC)
+    cell(key-Hashed Message Authentication Code)
+  }
+  row{
+    cell(IG)
+    cell(Implementation Guidance)
+  }
+  row{
+    cell(IV)
+    cell(Initialization Vector)
+  }
+  row{
+    cell(KAT)
+    cell(Known Answer Test)
+  }
+  row{
+    cell(MAC)
+    cell(Message Authentication Code)
+  }
+  row{
+    cell(MD5)
+    cell(Message Digest algorithm MD5)
+  }
+  row{
+    cell(N/A)
+    cell(Non Applicable)
+  }
+  row{
+    cell(NDRNG)
+    cell(Non Deterministic Random Number Generator)
+  }
+  row{
+    cell(OS)
+    cell(Operating System)
+  }
+  row{
+    cell(RSA)
+    cell(Rivest Shamir Adleman)
+  }
+  row{
+    cell(SHA)
+    cell(Secure Hash Algorithm)
+  }
+  row{
+    cell(T riple- DES)
+    cell(Triple Data Encryption Standard)
+  }
+}
