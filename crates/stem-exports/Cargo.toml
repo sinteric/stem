@@ -12,6 +12,7 @@ stem-types = { workspace = true }
 thiserror = { workspace = true }
 pulldown-latex = { version = "0.7.1", optional = true }
 printpdf = { version = "0.9.1", optional = true }
+docx-rs = { version = "0.4.20", optional = true }
 
 [dev-dependencies]
 stem-imports = { workspace = true, features = ["markdown"] }
@@ -22,6 +23,5 @@ default = ["html"]
 html = ["dep:pulldown-latex"]
 markdown = []
 pdf = ["dep:printpdf"]
-# Stubs for now; will gain real deps as implementations land.
-docx = []
+docx = ["dep:docx-rs"]
 all = ["html", "markdown", "docx", "pdf"]
