@@ -349,9 +349,15 @@ def emit_paragraph(p, caption_consumes=False):
     pre_lines = []
     if page_break_run is not None:
         pre_lines.append('pagebreak')
+    # Caption style — handled even when text is empty (the reference
+    # has an empty Caption placeholder we need to preserve).
+    if sty == 'Caption':
+        import re as _re
+        body = _re.sub(r'^(?:Table|Figure)\s+\d+\s*[\u2013-]\s*', '', text or '').strip()
+        if body:
+            return pre_lines + [f'caption({escape_text_body(body)})']
+        return pre_lines + ['caption()']
     if not text:
-        # Empty paragraph (preserve for spacing) — pre_lines may carry
-        # a pagebreak.
         if pre_lines:
             return pre_lines
         return ['p()']
@@ -378,10 +384,7 @@ def emit_paragraph(p, caption_consumes=False):
             body = text if has_inline else escape_text_body(text)
             return pre_lines + [f'h{n}{propblk}({body})']
 
-    # Captions are handled by the surrounding loop, not emitted as
-    # standalone p().
-    if sty == 'Caption':
-        return []  # consumed by the surrounding walker
+
 
     # Default body paragraph (with pre_lines for page breaks).
     if not text.strip():

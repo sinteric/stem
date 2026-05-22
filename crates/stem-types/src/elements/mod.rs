@@ -38,6 +38,7 @@ pub mod heading;
 
 // --- Document block content ---
 pub mod blockquote;
+pub mod caption;
 pub mod image;
 pub mod note;
 pub mod paragraph;
@@ -102,6 +103,7 @@ pub const ALL: &[&ElementDef] = &[
     &heading::H6,
     // Document block content
     &blockquote::BLOCKQUOTE,
+    &caption::CAPTION,
     &image::IMAGE,
     &note::NOTE,
     &paragraph::P,

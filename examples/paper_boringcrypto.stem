@@ -374,7 +374,7 @@ table[border:all, caption:"non-Approved or non-security relevant services"]{
   }
 }
 p(The module also provides the following non-Approved or non-security relevant services over a non-public interface:)
-p()
+caption()
 table[border:all, caption:"Non-Security Relevant Services"]{
   row[kind:header]{
     cell[align:center](@text[weight:bold](Service))

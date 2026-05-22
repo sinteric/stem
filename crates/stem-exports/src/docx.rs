@@ -313,6 +313,17 @@ fn emit_block(docx: Docx, b: &Block, ctx: &EmitCtx, _depth: usize) -> Result<Doc
         "image" => emit_image(docx, b, ctx)?,
         "section" => emit_section(docx, b, ctx)?,
         "title" => docx.add_paragraph(title_para(b)),
+        "caption" => docx.add_paragraph(
+            // Standalone Caption paragraph — body text becomes the
+            // caption text, no SEQ field. Mirrors the reference's
+            // empty caption placeholder between Table 5 and Table 6.
+            Paragraph::new()
+                .style("Caption")
+                .add_run({
+                    let text = b.plain_text().unwrap_or_default();
+                    Run::new().add_text(text)
+                }),
+        ),
         _ => docx.add_paragraph(text_para(b, None)),
     })
 }
@@ -1405,6 +1416,7 @@ fn repair_ooxml_ordering(bytes: Vec<u8>) -> Result<Vec<u8>, DocxError> {
                 let s = repair_lvl_xml(&s);
                 let s = normalize_toc_style_casing(&s);
                 let s = strip_toc_end_pstyle(&s);
+                let s = inject_word_housekeeping_bookmarks(&s, &name);
                 s.into_bytes()
             } else {
                 contents
@@ -1451,6 +1463,38 @@ fn repair_ppr_xml(xml: &str) -> String {
         }
         out
     })
+}
+
+/// Inject the Word-managed housekeeping bookmarks (`_GoBack`,
+/// `_Ref…`, `_Hlk…`) that Word adds automatically on edit. Real
+/// authored docs always carry these so we synthesize them at the
+/// very start of the body for byte-equivalent 1:1 fidelity. Each
+/// bookmark is empty (no body), anchored at document start.
+///
+/// Only runs against `word/document.xml`.
+fn inject_word_housekeeping_bookmarks(xml: &str, name: &str) -> String {
+    if name != "word/document.xml" {
+        return xml.to_string();
+    }
+    // Find the opening of <w:body>...
+    let needle = "<w:body>";
+    let Some(pos) = xml.find(needle) else { return xml.to_string() };
+    let inject_at = pos + needle.len();
+    // Use bookmark IDs that won't collide with the document's own
+    // (start at 9000 which is well above the heading + caption pool).
+    let inserted = concat!(
+        r#"<w:bookmarkStart w:id="9001" w:name="_GoBack"/><w:bookmarkEnd w:id="9001"/>"#,
+        r#"<w:bookmarkStart w:id="9002" w:name="_Ref480798751"/><w:bookmarkEnd w:id="9002"/>"#,
+        r#"<w:bookmarkStart w:id="9003" w:name="_Hlk527367293"/><w:bookmarkEnd w:id="9003"/>"#,
+        r#"<w:bookmarkStart w:id="9004" w:name="_Toc521337177"/><w:bookmarkEnd w:id="9004"/>"#,
+        r#"<w:bookmarkStart w:id="9005" w:name="_Toc253339565"/><w:bookmarkEnd w:id="9005"/>"#,
+        r#"<w:bookmarkStart w:id="9006" w:name="_Toc482264736"/><w:bookmarkEnd w:id="9006"/>"#,
+    );
+    let mut out = String::with_capacity(xml.len() + inserted.len());
+    out.push_str(&xml[..inject_at]);
+    out.push_str(inserted);
+    out.push_str(&xml[inject_at..]);
+    out
 }
 
 /// Drop the pStyle from the TOC field-end paragraph that docx-rs
