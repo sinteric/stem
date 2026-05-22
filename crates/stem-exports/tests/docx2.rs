@@ -70,3 +70,64 @@ fn empty_doc_is_valid_opc_package() {
     assert!(doc.contains("<w:pgSz"));
     assert!(doc.contains("<w:pgMar"));
 }
+
+#[test]
+fn empty_doc_includes_static_parts() {
+    let bytes = export_empty();
+
+    // Each static part exists and is content-type-registered.
+    let ct = read_entry(&bytes, "[Content_Types].xml");
+    for needed in [
+        "/word/theme/theme1.xml",
+        "/word/settings.xml",
+        "/word/webSettings.xml",
+        "/word/fontTable.xml",
+        "/docProps/core.xml",
+        "/docProps/app.xml",
+    ] {
+        assert!(
+            ct.contains(needed),
+            "Content_Types missing override for {needed}: {ct}"
+        );
+    }
+
+    let theme = read_entry(&bytes, "word/theme/theme1.xml");
+    assert!(theme.contains("<a:clrScheme"));
+    assert!(theme.contains("<a:fontScheme"));
+
+    let settings = read_entry(&bytes, "word/settings.xml");
+    assert!(settings.contains("<w:zoom"));
+    assert!(settings.contains("compatibilityMode"));
+
+    let web = read_entry(&bytes, "word/webSettings.xml");
+    assert!(web.contains("<w:optimizeForBrowser/>"));
+
+    let fonts = read_entry(&bytes, "word/fontTable.xml");
+    assert!(fonts.contains(r#"w:name="Calibri""#));
+    assert!(fonts.contains(r#"w:name="Cambria""#));
+
+    let core = read_entry(&bytes, "docProps/core.xml");
+    assert!(core.contains("<cp:coreProperties"));
+    let app = read_entry(&bytes, "docProps/app.xml");
+    assert!(app.contains("<Application>Stem (docx2)</Application>"));
+
+    // Document rels reference each of the new parts so Word doesn't
+    // see a dangling Override.
+    let doc_rels = read_entry(&bytes, "word/_rels/document.xml.rels");
+    for needed in [
+        "theme/theme1.xml",
+        "settings.xml",
+        "webSettings.xml",
+        "fontTable.xml",
+    ] {
+        assert!(
+            doc_rels.contains(&format!(r#"Target="{needed}""#)),
+            "document rels missing target {needed}: {doc_rels}"
+        );
+    }
+
+    // Root rels include the docProps refs.
+    let root = read_entry(&bytes, "_rels/.rels");
+    assert!(root.contains("docProps/core.xml"));
+    assert!(root.contains("docProps/app.xml"));
+}

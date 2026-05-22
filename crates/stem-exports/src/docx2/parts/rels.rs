@@ -40,6 +40,10 @@ pub mod kind {
         "http://schemas.openxmlformats.org/officeDocument/2006/relationships/hyperlink";
     pub const IMAGE: &str =
         "http://schemas.openxmlformats.org/officeDocument/2006/relationships/image";
+    pub const CORE_PROPS: &str =
+        "http://schemas.openxmlformats.org/package/2006/relationships/metadata/core-properties";
+    pub const EXTENDED_PROPS: &str =
+        "http://schemas.openxmlformats.org/officeDocument/2006/relationships/extended-properties";
 }
 
 /// One relationship entry: `<Relationship Id="rIdN" Type="..." Target="..."/>`.
@@ -91,6 +95,17 @@ pub fn build(rels: &[Rel]) -> String {
 /// Root relationships file: declares which part is the main document.
 pub fn root() -> String {
     build(&[Rel::new("rId1", kind::OFFICE_DOC, "word/document.xml")])
+}
+
+/// Root rels including the docProps refs. The reference docx puts
+/// the office-document rel first, then the docProps rels — keep
+/// that order so a structural diff against the reference is clean.
+pub fn root_with_metadata() -> String {
+    build(&[
+        Rel::new("rId1", kind::OFFICE_DOC, "word/document.xml"),
+        Rel::new("rId2", kind::CORE_PROPS, "docProps/core.xml"),
+        Rel::new("rId3", kind::EXTENDED_PROPS, "docProps/app.xml"),
+    ])
 }
 
 /// Document-level relationships for the minimal scaffold (task 1).

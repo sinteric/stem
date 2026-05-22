@@ -5,21 +5,84 @@ use super::package::Package;
 use super::DocxV2Error;
 
 pub mod content_types;
+pub mod doc_props;
 pub mod document;
+pub mod font_table;
 pub mod rels;
+pub mod settings;
+pub mod theme;
+pub mod web_settings;
 
-/// Minimal valid empty .docx: just the four parts Word requires to
-/// open the file — `[Content_Types].xml`, the root rels, the
-/// document part, and the document's rels.
+mod content_type_names {
+    //! Canonical Content_Types `Override` content-type strings.
+    pub const STYLES: &str =
+        "application/vnd.openxmlformats-officedocument.wordprocessingml.styles+xml";
+    pub const NUMBERING: &str =
+        "application/vnd.openxmlformats-officedocument.wordprocessingml.numbering+xml";
+    pub const SETTINGS: &str =
+        "application/vnd.openxmlformats-officedocument.wordprocessingml.settings+xml";
+    pub const WEB_SETTINGS: &str =
+        "application/vnd.openxmlformats-officedocument.wordprocessingml.webSettings+xml";
+    pub const FONT_TABLE: &str =
+        "application/vnd.openxmlformats-officedocument.wordprocessingml.fontTable+xml";
+    pub const FOOTNOTES: &str =
+        "application/vnd.openxmlformats-officedocument.wordprocessingml.footnotes+xml";
+    pub const ENDNOTES: &str =
+        "application/vnd.openxmlformats-officedocument.wordprocessingml.endnotes+xml";
+    pub const HEADER: &str =
+        "application/vnd.openxmlformats-officedocument.wordprocessingml.header+xml";
+    pub const FOOTER: &str =
+        "application/vnd.openxmlformats-officedocument.wordprocessingml.footer+xml";
+    pub const THEME: &str =
+        "application/vnd.openxmlformats-officedocument.theme+xml";
+    pub const DOC_MAIN: &str =
+        "application/vnd.openxmlformats-officedocument.wordprocessingml.document.main+xml";
+    pub const CORE: &str =
+        "application/vnd.openxmlformats-package.core-properties+xml";
+    pub const EXTENDED: &str =
+        "application/vnd.openxmlformats-officedocument.extended-properties+xml";
+}
+
+/// Minimal valid empty .docx with the full static-part set wired in:
+/// theme, settings, web settings, font table, docProps.
 ///
-/// Task 1 scaffold, exercised end-to-end through the task-2
-/// builder/packager. Subsequent tasks add styles, numbering, theme,
-/// header/footer, real body content, etc.
+/// Styles and numbering are not yet present (tasks 4-5); body
+/// content is a single empty paragraph (task 6 adds real emission).
+/// The document part's relationships reference everything that
+/// exists, so Word can open and re-save without complaining about
+/// dangling rels.
 pub fn minimal_empty_doc() -> Result<Vec<u8>, DocxV2Error> {
+    use content_type_names as ct;
+
+    let content_types = content_types::builder()
+        .override_part("/word/document.xml", ct::DOC_MAIN)
+        .override_part("/word/theme/theme1.xml", ct::THEME)
+        .override_part("/word/settings.xml", ct::SETTINGS)
+        .override_part("/word/webSettings.xml", ct::WEB_SETTINGS)
+        .override_part("/word/fontTable.xml", ct::FONT_TABLE)
+        .override_part("/docProps/core.xml", ct::CORE)
+        .override_part("/docProps/app.xml", ct::EXTENDED)
+        .finish();
+
+    let root_rels = rels::root_with_metadata();
+
+    let doc_rels = rels::build(&[
+        rels::Rel::new("rId1", rels::kind::THEME, "theme/theme1.xml"),
+        rels::Rel::new("rId2", rels::kind::SETTINGS, "settings.xml"),
+        rels::Rel::new("rId3", rels::kind::WEB_SETTINGS, "webSettings.xml"),
+        rels::Rel::new("rId4", rels::kind::FONT_TABLE, "fontTable.xml"),
+    ]);
+
     let mut pkg = Package::new();
-    pkg.add_text("[Content_Types].xml", content_types::minimal());
-    pkg.add_text("_rels/.rels", rels::root());
-    pkg.add_text("word/_rels/document.xml.rels", rels::document_minimal());
+    pkg.add_text("[Content_Types].xml", content_types);
+    pkg.add_text("_rels/.rels", root_rels);
+    pkg.add_text("word/_rels/document.xml.rels", doc_rels);
     pkg.add_text("word/document.xml", document::minimal());
+    pkg.add_text("word/theme/theme1.xml", theme::theme1());
+    pkg.add_text("word/settings.xml", settings::settings());
+    pkg.add_text("word/webSettings.xml", web_settings::web_settings());
+    pkg.add_text("word/fontTable.xml", font_table::font_table());
+    pkg.add_text("docProps/core.xml", doc_props::core(&doc_props::now_w3cdtf()));
+    pkg.add_text("docProps/app.xml", doc_props::app());
     pkg.finish()
 }
