@@ -21,11 +21,13 @@ use stem_core::theme::Theme;
 use stem_core::Exporter;
 use thiserror::Error;
 
-// The XML builder and packager are scaffolded here for task 1 and
-// exercised end-to-end in task 2; some helpers (escape_attr,
-// Part::new) aren't reached by the task-1 minimal-doc path yet.
+// The builder + part-emitter API surface is wider than the minimal
+// scaffold consumes. Each subsequent task wires up another slice
+// (styles, numbering, paragraphs, runs, tables, ...). Until they
+// land, suppress the dead-code warnings so the build stays clean.
 #[allow(dead_code)]
 mod package;
+#[allow(dead_code)]
 mod parts;
 #[allow(dead_code)]
 mod xml;
@@ -67,10 +69,9 @@ impl Exporter for DocxV2Exporter {
     type Output = Vec<u8>;
     type Error = DocxV2Error;
     fn export(&self, doc: &Document, _theme: &Theme) -> Result<Vec<u8>, DocxV2Error> {
-        // Task 1 scaffold: emit a minimal valid empty docx. The
+        // Task 1+2 scaffold: emit a minimal valid empty docx. The
         // cooked AST is not consumed yet — body emission is task 6.
         let _cooked = stem_parser::cook_document(doc);
-        let parts = parts::minimal_empty_doc();
-        package::pack(&parts)
+        parts::minimal_empty_doc()
     }
 }
