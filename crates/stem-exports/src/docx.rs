@@ -84,7 +84,17 @@ impl Exporter for DocxExporter {
         // paragraphs visually separate.
         out = out
             .default_size(22)
-            .default_fonts(RunFonts::new().ascii("Calibri").hi_ansi("Calibri"))
+            .default_fonts(
+                // Set both ascii/hi_ansi and east_asia/cs explicitly so
+                // localized Word builds (Korean Word, Japanese Word, etc.)
+                // don't pick a system fallback like Malgun Gothic for
+                // East-Asian-script paragraphs.
+                RunFonts::new()
+                    .ascii("Calibri")
+                    .hi_ansi("Calibri")
+                    .east_asia("Calibri")
+                    .cs("Calibri"),
+            )
             .default_line_spacing(
                 LineSpacing::new()
                     .line_rule(LineSpacingType::Auto)

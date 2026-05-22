@@ -465,8 +465,9 @@ while i < len(items):
                             props.append(f'w:{img_info["w_in"]:.2f}in')
                         if img_info['h_in']:
                             props.append(f'h:{img_info["h_in"]:.2f}in')
-                        if img_info['mode'] != 'inline':
-                            props.append(f'float:{img_info["mode"]}')
+                        # Floating mode disabled: docx-rs floating images
+                        # render at top-left without explicit position offsets,
+                        # which looks worse than inline. Stay inline.
                         if caption:
                             esc_cap = caption.replace('\\', '\\\\').replace('"', '\\"')
                             props.append(f'caption:"{esc_cap}"')
