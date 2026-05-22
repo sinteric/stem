@@ -25,8 +25,11 @@ pub mod formula;
 
 // --- Document structural ---
 pub mod col;
+pub mod footer;
+pub mod header;
 pub mod hr;
 pub mod layout;
+pub mod page_number;
 pub mod pagebreak;
 pub mod section;
 
@@ -82,8 +85,12 @@ pub const ALL: &[&ElementDef] = &[
     // Document structural
     &col::COL_LAYOUT,
     &col::COL_SHEET,
+    &footer::FOOTER,
+    &header::HEADER,
     &hr::HR,
     &layout::LAYOUT,
+    &page_number::PAGE_NUMBER,
+    &page_number::TOTAL_PAGES,
     &pagebreak::PAGEBREAK,
     &section::SECTION,
     // Headings

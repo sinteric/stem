@@ -1983,6 +1983,7 @@ name = "stem-exports"
 version = "0.1.0"
 dependencies = [
  "docx-rs",
+ "image",
  "printpdf",
  "pulldown-latex",
  "rust_xlsxwriter",

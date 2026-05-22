@@ -21,6 +21,10 @@ stem-imports = { workspace = true, features = ["markdown"] }
 # OOXML in `word/document.xml`. Same major version that docx-rs pulls
 # in transitively, so cargo unifies on one copy.
 zip = { version = "0.6", default-features = false, features = ["deflate"] }
+# Used by stage-3 image tests to mint a real tiny PNG at runtime so we
+# don't ship binary fixtures. docx-rs already enables this crate by
+# default, so no extra resolution cost.
+image = { version = "0.25", default-features = false, features = ["png"] }
 
 [features]
 default = ["html"]

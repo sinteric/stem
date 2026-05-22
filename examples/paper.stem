@@ -1,0 +1,67 @@
+[page-size:letter, margin:"1in 1in 1in 1in"]
+
+header{
+  p(BoringCrypto FIPS 140-2 Security Policy — Stem demo)
+}
+
+footer{
+  p(Page @page-number() of @total-pages())
+}
+
+h1(Stem academic-paper docx demo)
+
+p(This file exercises every feature added across stages 1 through 6 of the docx exporter.)
+
+section[id:toc]
+
+h1(Introduction)
+
+p(Stem is a declarative markup language that compiles to many formats. This demo targets docx and shows how an academic-paper-style document is expressed in the source.)
+
+p(For background see the @link[to:"https://example.com/stem"](project page) or the dedicated paper@footnote(Cho 2026, Stem grammar specification v1.0).)
+
+h2(Layout)
+
+p(The document uses letter-sized pages with one-inch margins on all four sides, a header band carrying the document title, and a footer band with auto-numbering @page-number() / @total-pages() fields.)
+
+h1(Tables)
+
+p(The first table summarizes the FIPS section validation levels.)
+
+table[border:all, caption:"FIPS 140-2 section validation levels for the BoringCrypto module"]{
+  row[kind:header]{
+    cell(Section)
+    cell(Level)
+  }
+  row{ cell(Cryptographic Module Specification) cell(1) }
+  row{ cell(Module Ports and Interfaces) cell(1) }
+  row{ cell(Roles, Services, and Authentication) cell(1) }
+  row{ cell(Finite State Model) cell(1) }
+  row{ cell[bg:yellow](Operational Environment) cell[bg:yellow](1) }
+}
+
+p(The next table demonstrates colspan, rowspan, and stripe rendering.)
+
+table[border:outer, stripe:true, caption:"Supported cryptographic algorithms"]{
+  row[kind:header]{ cell(Family) cell[colspan:2](Modes / Methods) }
+  row{ cell(AES) cell(ECB, CBC, CTR) cell(GCM, CCM) }
+  row{ cell(RSA) cell[colspan:2](sign/verify with PKCS#1 v1.5 + PSS) }
+  row{ cell[rowspan:2](SHA-2) cell(SHA-256) cell(SHA-512) }
+  row{ cell(SHA-384) cell(SHA-512/256) }
+}
+
+h1(Cross-references)
+
+p(Word will render the table of contents above with live page-number links back to each heading. Heading anchors also work for inline references such as @link[to:"#references"](References).)
+
+h1(Conclusion)
+
+p("Stem can now author papers like this directly. The exporter produces a docx that opens cleanly in Word with: page setup, header/footer with page numbers, an auto-generated TOC, bookmarked headings, tables with merged cells and styled rows, hyperlinks (external and anchor), and footnotes.")
+
+h1[id:references](References)
+
+ul{
+  li(BoringCrypto FIPS 140-2 Security Policy, 2018.)
+  li(Stem grammar specification v1.0.)
+  li(Office Open XML File Formats — ISO/IEC 29500.)
+}

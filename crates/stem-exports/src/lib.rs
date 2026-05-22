@@ -27,7 +27,7 @@ pub mod pdf;
 pub mod xlsx;
 
 #[cfg(feature = "docx")]
-pub use docx::DocxExporter;
+pub use docx::{DocxError, DocxExporter};
 #[cfg(feature = "html")]
 pub use html::HtmlExporter;
 #[cfg(feature = "markdown")]
