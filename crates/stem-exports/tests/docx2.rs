@@ -131,3 +131,63 @@ fn empty_doc_includes_static_parts() {
     assert!(root.contains("docProps/core.xml"));
     assert!(root.contains("docProps/app.xml"));
 }
+
+#[test]
+fn empty_doc_styles_part_has_canonical_set() {
+    let bytes = export_empty();
+    let styles = read_entry(&bytes, "word/styles.xml");
+
+    // Every style ID we'll reference from document.xml exists.
+    for id in [
+        "Normal",
+        "DefaultParagraphFont",
+        "TableNormal",
+        "Heading1",
+        "Heading6",
+        "Title",
+        "Caption",
+        "Hyperlink",
+        "FootnoteReference",
+        "TOC1",
+        "TOC9",
+        "TOCHeading",
+        "TableofFigures",
+        "ListParagraph",
+    ] {
+        assert!(
+            styles.contains(&format!(r#"w:styleId="{id}""#)),
+            "missing styleId {id}"
+        );
+    }
+
+    // docDefaults precedes latentStyles precedes real styles —
+    // the schema requires this order.
+    let dd = styles.find("<w:docDefaults>").unwrap();
+    let ls = styles.find("<w:latentStyles ").unwrap();
+    let normal = styles.find(r#"w:styleId="Normal""#).unwrap();
+    assert!(dd < ls && ls < normal);
+
+    // Heading1's <w:pPr> emits keepNext before spacing before
+    // outlineLvl — the schema-order bug that motivated this
+    // migration in the first place.
+    let h1 = styles.find(r#"w:styleId="Heading1""#).unwrap();
+    let h1_end = styles[h1..].find("</w:style>").unwrap() + h1;
+    let h1_block = &styles[h1..h1_end];
+    let kn = h1_block.find("<w:keepNext/>").unwrap();
+    let sp = h1_block.find("<w:spacing").unwrap();
+    let ol = h1_block.find("<w:outlineLvl").unwrap();
+    assert!(kn < sp && sp < ol, "block:\n{h1_block}");
+
+    // Style metadata (uiPriority, qFormat) precedes pPr in every
+    // heading — the other schema-order bug docx-rs hit.
+    let pri = h1_block.find("<w:uiPriority").unwrap();
+    let qf = h1_block.find("<w:qFormat/>").unwrap();
+    let ppr = h1_block.find("<w:pPr>").unwrap();
+    assert!(pri < qf && qf < ppr);
+
+    // Content_Types registers the styles part.
+    let ct = read_entry(&bytes, "[Content_Types].xml");
+    assert!(ct.contains("/word/styles.xml"));
+    let doc_rels = read_entry(&bytes, "word/_rels/document.xml.rels");
+    assert!(doc_rels.contains(r#"Target="styles.xml""#));
+}
