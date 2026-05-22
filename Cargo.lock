@@ -694,6 +694,7 @@ version = "0.1.0"
 dependencies = [
  "pulldown-latex",
  "stem-core",
+ "stem-imports",
  "stem-parser",
  "stem-types",
  "thiserror",

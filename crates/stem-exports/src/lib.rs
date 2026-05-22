@@ -19,6 +19,8 @@ pub mod docx;
 pub mod html;
 #[cfg(feature = "html")]
 pub mod math;
+#[cfg(feature = "markdown")]
+pub mod markdown;
 #[cfg(feature = "pdf")]
 pub mod pdf;
 
@@ -26,6 +28,8 @@ pub mod pdf;
 pub use docx::DocxExporter;
 #[cfg(feature = "html")]
 pub use html::HtmlExporter;
+#[cfg(feature = "markdown")]
+pub use markdown::MarkdownExporter;
 #[cfg(feature = "pdf")]
 pub use pdf::PdfExporter;
 

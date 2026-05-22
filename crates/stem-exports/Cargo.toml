@@ -12,11 +12,15 @@ stem-types = { workspace = true }
 thiserror = { workspace = true }
 pulldown-latex = { version = "0.7.1", optional = true }
 
+[dev-dependencies]
+stem-imports = { workspace = true, features = ["markdown"] }
+
 [features]
 default = ["html"]
 # `html` includes the LaTeX-to-MathML conversion for @math.
 html = ["dep:pulldown-latex"]
+markdown = []
 # Stubs for now; will gain real deps as implementations land.
 docx = []
 pdf = []
-all = ["html", "docx", "pdf"]
+all = ["html", "markdown", "docx", "pdf"]
