@@ -100,9 +100,12 @@ impl Exporter for DocxExporter {
         // relies on the `outlineLvl` set here.
         out = register_styles(out);
 
+        let headings = collect_headings(&cooked.blocks);
         let ctx = EmitCtx {
             theme,
             image_base: self.image_base.as_deref(),
+            headings,
+            heading_cursor: std::cell::Cell::new(0),
         };
 
         // Apply doc-level page setup from metadata. The schema gives
@@ -153,21 +156,72 @@ impl Exporter for DocxExporter {
 // --- emission -----------------------------------------------------------
 
 /// Per-export context that flows through every `emit_*` call. Holds the
-/// theme (for color resolution) and the optional image base directory
-/// used to resolve relative `image[src:..]` paths.
+/// theme (for color resolution), the optional image base directory
+/// used to resolve relative `image[src:..]` paths, and the pre-walked
+/// list of heading anchors used to bookmark each heading and pre-
+/// populate the TOC field.
 struct EmitCtx<'a> {
     theme: &'a Theme,
     image_base: Option<&'a Path>,
+    headings: Vec<HeadingInfo>,
+    /// Mutable counter used during emission to pair each heading
+    /// paragraph with its pre-assigned bookmark. Wrapped in a Cell so
+    /// `&EmitCtx` callers can advance it.
+    heading_cursor: std::cell::Cell<usize>,
+}
+
+/// One entry in the pre-walked heading outline. The bookmark name is
+/// deterministic (`_Toc_h{level}_{seq}`) so successive renders of the
+/// same source produce byte-stable output, and the TOC field's
+/// PAGEREF entries can hyperlink to the same name the heading
+/// paragraph emits.
+#[derive(Clone)]
+struct HeadingInfo {
+    level: usize,
+    text: String,
+    bookmark: String,
+}
+
+/// Pre-walk the block tree and collect heading metadata in document
+/// order. Walks transparently through `section` containers since they
+/// wrap headings without changing outline semantics.
+fn collect_headings(blocks: &[Block]) -> Vec<HeadingInfo> {
+    let mut out: Vec<HeadingInfo> = Vec::new();
+    fn walk(blocks: &[Block], out: &mut Vec<HeadingInfo>) {
+        for b in blocks {
+            match b.name.as_str() {
+                "h1" | "h2" | "h3" | "h4" | "h5" | "h6" => {
+                    let level: usize = b.name[1..].parse().unwrap_or(1);
+                    let text = b.plain_text().unwrap_or_default();
+                    let seq = out.len() + 1;
+                    let bookmark = format!("_Toc_h{}_{}", level, seq);
+                    out.push(HeadingInfo {
+                        level,
+                        text,
+                        bookmark,
+                    });
+                }
+                "section" => {
+                    if let Body::Children(children) = &b.body {
+                        walk(children, out);
+                    }
+                }
+                _ => {}
+            }
+        }
+    }
+    walk(blocks, &mut out);
+    out
 }
 
 fn emit_block(docx: Docx, b: &Block, ctx: &EmitCtx, _depth: usize) -> Result<Docx, DocxError> {
     Ok(match b.name.as_str() {
-        "h1" => docx.add_paragraph(heading_para(b, 1)),
-        "h2" => docx.add_paragraph(heading_para(b, 2)),
-        "h3" => docx.add_paragraph(heading_para(b, 3)),
-        "h4" => docx.add_paragraph(heading_para(b, 4)),
-        "h5" => docx.add_paragraph(heading_para(b, 5)),
-        "h6" => docx.add_paragraph(heading_para(b, 6)),
+        "h1" => docx.add_paragraph(heading_para(b, 1, ctx)),
+        "h2" => docx.add_paragraph(heading_para(b, 2, ctx)),
+        "h3" => docx.add_paragraph(heading_para(b, 3, ctx)),
+        "h4" => docx.add_paragraph(heading_para(b, 4, ctx)),
+        "h5" => docx.add_paragraph(heading_para(b, 5, ctx)),
+        "h6" => docx.add_paragraph(heading_para(b, 6, ctx)),
         "p" => docx.add_paragraph(text_para(b, None)),
         "blockquote" => docx.add_paragraph(blockquote_para(b)),
         "code" => emit_code_block(docx, b),
@@ -216,26 +270,11 @@ fn parse_toc_levels(spec: Option<&str>) -> (usize, usize) {
 fn emit_section(docx: Docx, b: &Block, ctx: &EmitCtx) -> Result<Docx, DocxError> {
     let id = b.prop_str("id");
     if id == Some("toc") {
-        // TOC field matching what Word's "Insert > Table of Contents >
-        // Automatic" produces. Switches:
-        //   \o "start-end"  include heading range (default full
-        //                   1..MAX_HEADING_LEVEL; overridable via
-        //                   `levels` property).
-        //   \h              every entry is a hyperlink (clickable).
-        //   \z              hide tab leader and page numbers in Web
-        //                   layout view.
-        //   \u              use applied paragraph outline level — lets
-        //                   the field rely on the `outlineLvl` set in
-        //                   register_styles rather than per-paragraph
-        //                   numPr.
-        // `dirty` triggers Word to refresh the field on open. We drop
-        // the SDT wrapper to match the BoringCrypto reference and
-        // avoid Word's content-controls dialog.
-        // docx-rs's TableOfContents builder doesn't surface \u or \z,
-        // so we hand-build the instruction text via `with_instr_text`.
         let (start, end) = parse_toc_levels(b.prop_str("levels"));
+        // TOC field instruction. Switches mirror what Word's "Insert
+        // > Table of Contents > Automatic" produces.
         let instr = format!(" TOC \\o \"{}-{}\" \\h \\z \\u ", start, end);
-        let toc = TableOfContents::with_instr_text(&instr)
+        let mut toc = TableOfContents::with_instr_text(&instr)
             .dirty()
             .without_sdt()
             .add_before_paragraph(
@@ -243,6 +282,20 @@ fn emit_section(docx: Docx, b: &Block, ctx: &EmitCtx) -> Result<Docx, DocxError>
                     .style("Heading1")
                     .add_run(Run::new().add_text("Table of Contents")),
             );
+        // Pre-populate TOC entries from the document outline so Word
+        // shows a complete table on first open. The field is still
+        // marked dirty so right-click "Update Field" recomputes the
+        // page numbers (which we can't know up front).
+        for info in &ctx.headings {
+            if info.level < start || info.level > end {
+                continue;
+            }
+            let item = docx_rs::TableOfContentsItem::new()
+                .text(info.text.clone())
+                .level(info.level)
+                .toc_key(info.bookmark.clone());
+            toc = toc.add_item(item);
+        }
         return Ok(docx.add_table_of_contents(toc));
     }
     let mut docx = docx;
@@ -267,23 +320,33 @@ fn title_para(b: &Block) -> Paragraph {
     apply_pieces(p, collect_pieces(b, RunStyle::default()))
 }
 
-fn heading_para(b: &Block, level: u8) -> Paragraph {
+fn heading_para(b: &Block, level: u8, ctx: &EmitCtx) -> Paragraph {
     let style = format!("Heading{}", level);
     let mut p = Paragraph::new()
         .style(&style)
         .keep_next(true)
         .keep_lines(true)
         .line_spacing(heading_paragraph_spacing(level as usize));
-    // Opt-in auto-numbering. `numbered:true` joins the document-wide
-    // multilevel list (1., 1.1, 1.1.1, ...). Since the abstract
-    // numbering is pStyle-linked we still pass the level explicitly so
-    // a heading inside a `<w:numPr>` block gets the right counter.
     if b.prop_str("numbered") == Some("true") {
         p = p.numbering(
             NumberingId::new(NUM_ID_HEADING),
             IndentLevel::new((level as usize).saturating_sub(1)),
         );
     }
+    // Bookmark this heading so the TOC field's PAGEREF entries can
+    // anchor here. The cursor was populated by `collect_headings` in
+    // document order, so advancing it once per heading paragraph keeps
+    // the names in sync with the pre-populated TOC items.
+    let cursor = ctx.heading_cursor.get();
+    if let Some(info) = ctx.headings.get(cursor) {
+        // Bookmark IDs are 1-based and must be unique per document;
+        // we use the cursor index + 1.
+        let id = cursor + 1;
+        p = p
+            .add_bookmark_start(id, info.bookmark.clone())
+            .add_bookmark_end(id);
+    }
+    ctx.heading_cursor.set(cursor + 1);
     apply_pieces(p, collect_pieces(b, RunStyle::default()))
 }
 
