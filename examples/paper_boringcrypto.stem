@@ -57,10 +57,10 @@ p(The software referenced in this document is licensed to you under the terms an
 h1(Notices)
 p(This document may be freely reproduced and distributed in its entirety without modification.)
 pagebreak
-pagebreak
+p("@text[weight:bold]( )")
 p()
 p()
-pagebreak
+p("@text[weight:bold]( )")
 h1[numbered:true](Introduction)
 p("Google Inc. BoringCrypto module \\(hereafter referred to as the “module”\\) is an open-source, general-purpose cryptographic library which provides FIPS 140-2 approved cryptographic algorithms to serve BoringSSL and other user-space applications. The validated version of the library is 66005f41fbc3529ffe8d007708756720529da20d. For the purposes of the FIPS 140-2 validation, its embodiment type is defined as multi-chip standalone.")
 p("The cryptographic module was tested on the following operational environments on the general-purpose computer \\(GPC\\) platforms detailed below:")

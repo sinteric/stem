@@ -81,14 +81,28 @@ def extract_first_image(p):
 
 def render_inline_pieces(parent) -> str:
     """Build a stem-text body string from a paragraph's inline content,
-    converting hyperlinks to @link[...]. Returns the body fragment to
-    place inside `p(...)` etc."""
+    converting hyperlinks to @link[...] and bold/italic runs to
+    @text[weight:bold|style:italic](...)."""
     parts = []
     for child in parent:
         if child.tag == W+'r':
             txt = get_run_text(child)
-            if txt:
-                parts.append(stem_escape(txt))
+            if not txt:
+                continue
+            # Check run properties for bold/italic.
+            rPr = child.find(W+'rPr')
+            is_bold = rPr is not None and rPr.find(W+'b') is not None
+            is_italic = rPr is not None and rPr.find(W+'i') is not None
+            esc = stem_escape(txt)
+            if is_bold and is_italic:
+                parts.append(f'@text[weight:bold, style:italic]({esc})')
+            elif is_bold:
+                parts.append(f'@text[weight:bold]({esc})')
+            elif is_italic:
+                parts.append(f'@text[style:italic]({esc})')
+            else:
+                parts.append(esc)
+            continue
         elif child.tag == W+'hyperlink':
             anchor = child.get(W+'anchor')
             rid = child.get(R+'id')
