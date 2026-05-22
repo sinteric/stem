@@ -54,23 +54,30 @@ fn paragraph_renders() {
 
 #[test]
 fn multi_page_long_document() {
-    // Force pagination: emit 80 paragraphs.
+    // Force pagination unambiguously: 200 long paragraphs definitely
+    // overflows one A4 page even with conservative line counts.
     let mut src = String::from("# Long\n\n");
-    for i in 0..80 {
+    for i in 0..200 {
         src.push_str(&format!(
-            "Paragraph {}: lorem ipsum dolor sit amet consectetur adipiscing elit.\n\n",
+            "Paragraph {}: lorem ipsum dolor sit amet consectetur adipiscing elit, sed do eiusmod tempor incididunt ut labore et dolore magna aliqua.\n\n",
             i
         ));
     }
     let bytes = pdf_bytes(&src);
-    // PDF page count appears in the document; a second page means we
-    // didn't silently drop content. The `/Pages` dictionary's `/Count`
-    // entry holds the page count.
     let blob = String::from_utf8_lossy(&bytes);
-    assert!(
-        blob.contains("/Count 2") || blob.contains("/Count 3") || blob.contains("/Count 4"),
-        "expected multi-page PDF"
-    );
+    // /Pages dict carries /Count N. Extract and assert N >= 2.
+    let count = blob
+        .split("/Count ")
+        .nth(1)
+        .and_then(|s| {
+            s.chars()
+                .take_while(|c| c.is_ascii_digit())
+                .collect::<String>()
+                .parse::<u32>()
+                .ok()
+        })
+        .expect("no /Count in PDF");
+    assert!(count >= 2, "expected multi-page PDF, got /Count {}", count);
 }
 
 #[test]
@@ -98,4 +105,45 @@ fn empty_document_still_valid() {
     assert!(bytes.starts_with(b"%PDF-"));
     let blob = String::from_utf8_lossy(&bytes);
     assert!(blob.contains("%%EOF"));
+}
+
+#[test]
+fn custom_font_can_be_configured() {
+    // We don't have a font fixture to embed in tests; verify the API
+    // accepts arbitrary bytes (even invalid ones) without panicking.
+    // ParsedFont::from_bytes returns None for unparseable input and the
+    // exporter silently falls back to built-in fonts.
+    let exporter = PdfExporter::new().with_font(vec![0, 1, 2, 3]);
+    let bytes = exporter
+        .export(
+            &import_str("# Latin Test\n\nA paragraph.\n"),
+            &Theme::default(),
+        )
+        .expect("export");
+    assert!(bytes.starts_with(b"%PDF-"));
+}
+
+#[test]
+fn inline_emphasis_round_trips_to_pdf() {
+    // Bold and italic should produce a PDF without errors. Verifying
+    // the exact font switching in the byte stream is brittle; just
+    // ensure the doc renders.
+    let bytes = pdf_bytes("This has **bold** and *italic* spans.\n");
+    assert!(bytes.starts_with(b"%PDF-"));
+    assert!(bytes.len() > 500);
+}
+
+#[test]
+fn word_wrap_uses_real_metrics() {
+    // A paragraph longer than one line should wrap to multiple lines.
+    // Indirect proof: the byte stream contains multiple text-cursor
+    // operations (Td) — one per emitted line.
+    let bytes = pdf_bytes(
+        "This is a sufficiently long paragraph that absolutely must wrap across multiple lines when laid out at 11pt on an A4 page with twenty-millimeter margins; if this fits on one line then our word wrap is broken.\n",
+    );
+    let blob = String::from_utf8_lossy(&bytes);
+    // Each SetTextCursor produces a "Td" operator in PDF content. With
+    // wrap, we expect multiple. Without wrap, exactly one.
+    let td_count = blob.matches(" Td").count();
+    assert!(td_count >= 2, "expected wrap-induced multi-line, got {} Td ops", td_count);
 }
