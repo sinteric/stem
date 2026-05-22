@@ -13,9 +13,10 @@ use std::path::{Path, PathBuf};
 use docx_rs::{
     AbstractNumbering, AlignmentType, BorderType, Docx, FieldCharType, Footer, Footnote, Header,
     Hyperlink, HyperlinkType, IndentLevel, InstrNUMPAGES, InstrPAGE, InstrText, Level, LevelJc,
-    LevelText, NumberFormat, Numbering, NumberingId, PageMargin, PageOrientationType, Paragraph,
-    Pic, Run, RunFonts, Shading, SpecialIndentType, Start, Style, StyleType, Table, TableBorder,
-    TableBorders, TableCell, TableOfContents, TableRow, VAlignType, VMergeType,
+    LevelText, LineSpacing, LineSpacingType, NumberFormat, Numbering, NumberingId, PageMargin,
+    PageOrientationType, Paragraph, Pic, Run, RunFonts, Shading, SpecialIndentType, Start, Style,
+    StyleType, Table, TableBorder, TableBorders, TableCell, TableOfContents, TableRow, VAlignType,
+    VMergeType,
 };
 use stem_core::ast::{Block, Body, Document, TextPiece};
 use stem_core::theme::Theme;
@@ -70,7 +71,26 @@ impl Exporter for DocxExporter {
             .add_abstract_numbering(abstract_numbering(1, false))
             .add_numbering(Numbering::new(1, 1))
             .add_abstract_numbering(abstract_numbering(2, true))
-            .add_numbering(Numbering::new(2, 2));
+            .add_numbering(Numbering::new(2, 2))
+            // Heading multi-level numbering: 1., 1.1, 1.1.1, ... up
+            // to MAX_HEADING_LEVEL. Referenced from heading paragraphs
+            // that carry `numbered:true`.
+            .add_abstract_numbering(heading_abstract_numbering(NUM_ID_HEADING))
+            .add_numbering(Numbering::new(NUM_ID_HEADING, NUM_ID_HEADING));
+
+        // Document defaults — applied to every paragraph unless
+        // overridden. Matches Word's modern Normal defaults: Calibri
+        // 11pt body, 1.08× line height, 8pt trailing space so
+        // paragraphs visually separate.
+        out = out
+            .default_size(22)
+            .default_fonts(RunFonts::new().ascii("Calibri").hi_ansi("Calibri"))
+            .default_line_spacing(
+                LineSpacing::new()
+                    .line_rule(LineSpacingType::Auto)
+                    .line(259)
+                    .after(160),
+            );
 
         // Register the paragraph + character styles we reference from
         // the document body. docx-rs's default styles.xml only
@@ -232,7 +252,21 @@ fn emit_section(docx: Docx, b: &Block, ctx: &EmitCtx) -> Result<Docx, DocxError>
 
 fn heading_para(b: &Block, level: u8) -> Paragraph {
     let style = format!("Heading{}", level);
-    let p = Paragraph::new().style(&style);
+    let mut p = Paragraph::new()
+        .style(&style)
+        .keep_next(true)
+        .keep_lines(true)
+        .line_spacing(heading_paragraph_spacing(level as usize));
+    // Opt-in auto-numbering. `numbered:true` joins the document-wide
+    // multilevel list (1., 1.1, 1.1.1, ...). Since the abstract
+    // numbering is pStyle-linked we still pass the level explicitly so
+    // a heading inside a `<w:numPr>` block gets the right counter.
+    if b.prop_str("numbered") == Some("true") {
+        p = p.numbering(
+            NumberingId::new(NUM_ID_HEADING),
+            IndentLevel::new((level as usize).saturating_sub(1)),
+        );
+    }
     apply_pieces(p, collect_pieces(b, RunStyle::default()))
 }
 
@@ -1077,6 +1111,7 @@ fn repair_ooxml_ordering(bytes: Vec<u8>) -> Result<Vec<u8>, DocxError> {
                 })?;
                 let s = repair_ppr_xml(&s);
                 let s = repair_style_xml(&s);
+                let s = repair_lvl_xml(&s);
                 s.into_bytes()
             } else {
                 contents
@@ -1121,6 +1156,47 @@ fn repair_ppr_xml(xml: &str) -> String {
         for c in pstyle.iter().chain(middle.iter()).chain(rpr.iter()) {
             out.push_str(c);
         }
+        out
+    })
+}
+
+/// Reorder children inside every `<w:lvl ...>...</w:lvl>` element to
+/// the OOXML CT_Lvl order: start, numFmt, lvlRestart, pStyle, isLgl,
+/// suff, lvlText, lvlJc, pPr, rPr, legacy. docx-rs emits pStyle after
+/// pPr/rPr which makes Word ignore the lvl→Heading style back-link.
+fn repair_lvl_xml(xml: &str) -> String {
+    rewrite_blocks_open_attrs(xml, "<w:lvl", "</w:lvl>", |open_tag, inner| {
+        let children = split_top_level_children(inner);
+        const ORDER: &[&str] = &[
+            "<w:start", "<w:numFmt", "<w:lvlRestart", "<w:pStyle", "<w:isLgl",
+            "<w:suff", "<w:lvlText", "<w:lvlJc", "<w:pPr", "<w:rPr", "<w:legacy",
+        ];
+        let mut buckets: Vec<Vec<&str>> = vec![Vec::new(); ORDER.len()];
+        let mut leftover: Vec<&str> = Vec::new();
+        for c in children {
+            let mut placed = false;
+            for (i, prefix) in ORDER.iter().enumerate() {
+                if c.starts_with(prefix) {
+                    buckets[i].push(c);
+                    placed = true;
+                    break;
+                }
+            }
+            if !placed {
+                leftover.push(c);
+            }
+        }
+        let mut out = String::with_capacity(open_tag.len() + inner.len() + 16);
+        out.push_str(open_tag);
+        for bucket in &buckets {
+            for c in bucket {
+                out.push_str(c);
+            }
+        }
+        for c in leftover {
+            out.push_str(c);
+        }
+        out.push_str("</w:lvl>");
         out
     })
 }
@@ -1335,10 +1411,10 @@ fn split_top_level_children(inner: &str) -> Vec<&str> {
 // --- styles -------------------------------------------------------------
 
 /// Decreasing heading sizes, in OOXML half-points. Index 0 = `Heading1`.
-/// 36/32/28/26/24/22 hp = 18/16/14/13/12/11 pt; clamps at 22 hp for
-/// anything past the array.
+/// 32/26/24/22/22/22 hp = 16/13/12/11/11/11 pt — matches Word 2016+
+/// default Heading1..6 sizing. Clamps at 22 hp for any deeper level.
 fn heading_size_half_points(level: usize) -> usize {
-    const SIZES: &[usize] = &[36, 32, 28, 26, 24, 22];
+    const SIZES: &[usize] = &[32, 26, 24, 22, 22, 22];
     *SIZES
         .get(level.saturating_sub(1))
         .unwrap_or_else(|| SIZES.last().expect("SIZES is non-empty"))
@@ -1358,7 +1434,12 @@ fn register_styles(mut docx: Docx) -> Docx {
     // Heading1..N with outline levels 0..N-1. The level cap comes from
     // `stem_types::MAX_HEADING_LEVEL` so this stays in sync with the
     // h1..hN element definitions and the default TOC heading range.
-    // Sizes step from 36pt down to 22pt in half-point units.
+    //
+    // Visual look matches Word's "Office" theme defaults: theme major
+    // font (Calibri Light at the rPr level), blue accent color
+    // 2E74B5, sizes 16/13/12/11/11/11pt. Headings are NOT bold —
+    // Word's defaults rely on color + size for differentiation, and
+    // bolding them looks heavy when stacked with body Calibri 11pt.
     for level in 1..=stem_types::MAX_HEADING_LEVEL {
         let size_hp = heading_size_half_points(level);
         let style = Style::new(format!("Heading{}", level), StyleType::Paragraph)
@@ -1368,24 +1449,27 @@ fn register_styles(mut docx: Docx) -> Docx {
             .q_format(true)
             .ui_priority(9)
             .outline_lvl(level - 1)
-            .bold()
+            .color("2E74B5")
+            .fonts(RunFonts::new().ascii("Calibri Light").hi_ansi("Calibri Light"))
             .size(size_hp);
         docx = docx.add_style(style);
     }
 
-    // Title: typically used on the cover page; larger than Heading1.
+    // Title: cover page; larger, centered, deep accent color.
     let title = Style::new("Title", StyleType::Paragraph)
         .name("Title")
         .based_on("Normal")
         .next("Normal")
         .q_format(true)
         .ui_priority(10)
-        .bold()
+        .color("2E74B5")
+        .fonts(RunFonts::new().ascii("Calibri Light").hi_ansi("Calibri Light"))
         .size(56);
     docx = docx.add_style(title);
 
-    // Caption — italic, slightly smaller. Word's built-in default
-    // looks similar.
+    // Caption — italic, smaller, dark blue-gray. Matches the look
+    // Word's default Caption style gives "Figure 1." / "Table 1."
+    // paragraphs.
     let caption = Style::new("Caption", StyleType::Paragraph)
         .name("caption")
         .based_on("Normal")
@@ -1393,11 +1477,12 @@ fn register_styles(mut docx: Docx) -> Docx {
         .q_format(true)
         .ui_priority(35)
         .italic()
+        .color("44546A")
         .size(18);
     docx = docx.add_style(caption);
 
     // Hyperlink: blue + underlined character style applied to runs
-    // inside <w:hyperlink>. Without this, the hyperlink visually
+    // inside <w:hyperlink>. Without this the hyperlink visually
     // looks like plain text.
     let hyperlink = Style::new("Hyperlink", StyleType::Character)
         .name("Hyperlink")
@@ -1406,7 +1491,8 @@ fn register_styles(mut docx: Docx) -> Docx {
         .underline("single");
     docx = docx.add_style(hyperlink);
 
-    // FootnoteReference: superscript marker character style.
+    // FootnoteReference: superscript marker character style. Size 16
+    // (8pt) is the typical superscript size for an 11pt body.
     let foot_ref = Style::new("FootnoteReference", StyleType::Character)
         .name("footnote reference")
         .ui_priority(99)
@@ -1416,7 +1502,67 @@ fn register_styles(mut docx: Docx) -> Docx {
     docx
 }
 
+/// Per-heading paragraph properties that the style builder can't emit
+/// directly: keepNext/keepLines (so a heading isn't orphaned from its
+/// body), and tighter pre/post spacing than the body default.
+fn heading_paragraph_spacing(level: usize) -> LineSpacing {
+    let (before, after) = match level {
+        1 => (240u32, 0u32),  // 12pt before, 0 after — H1 starts a section
+        _ => (40, 0),          // 2pt for H2..N; relies on prev paragraph's after
+    };
+    LineSpacing::new()
+        .line_rule(LineSpacingType::Auto)
+        .line(259)
+        .before(before)
+        .after(after)
+}
+
 // --- list numbering definition ------------------------------------------
+
+/// numId reserved for the heading multilevel-list numbering.
+/// 1 + 2 are used by ordered/unordered lists; 3 is the heading list.
+const NUM_ID_HEADING: usize = 3;
+
+/// Define a multilevel numbering tied to Heading1..N levels. Level 0
+/// emits "1.", level 1 emits "1.1", level 2 "1.1.1", etc. The pattern
+/// resets sub-levels when a higher level increments, which is what
+/// Word's "Multilevel List → 1, 1.1, 1.1.1" preset does. Each level
+/// is `pStyle`-linked so Word knows to draw the numbering on any
+/// paragraph using the matching Heading style.
+fn heading_abstract_numbering(id: usize) -> AbstractNumbering {
+    let mut a = AbstractNumbering::new(id);
+    for lvl in 0..stem_types::MAX_HEADING_LEVEL {
+        // Build the format text "%1.%2.%3..." up to this level.
+        let mut text = String::new();
+        for i in 0..=lvl {
+            if i > 0 {
+                text.push('.');
+            }
+            text.push_str(&format!("%{}", i + 1));
+        }
+        // Top level gets the trailing dot ("1."); deeper levels don't
+        // (e.g. "1.1" rather than "1.1.").
+        if lvl == 0 {
+            text.push('.');
+        }
+        let level = Level::new(
+            lvl,
+            Start::new(1),
+            NumberFormat::new("decimal"),
+            LevelText::new(text),
+            LevelJc::new("left"),
+        )
+        .indent(
+            Some(0),
+            Some(SpecialIndentType::Hanging(360)),
+            None,
+            None,
+        )
+        .paragraph_style(format!("Heading{}", lvl + 1));
+        a = a.add_level(level);
+    }
+    a
+}
 
 fn abstract_numbering(id: usize, bullet: bool) -> AbstractNumbering {
     // A 9-level list: each level either bulleted or decimal.

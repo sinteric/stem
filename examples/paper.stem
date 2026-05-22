@@ -14,17 +14,17 @@ p(This file exercises every feature added across stages 1 through 6 of the docx 
 
 section[id:toc]
 
-h1(Introduction)
+h1[numbered:true](Introduction)
 
 p(Stem is a declarative markup language that compiles to many formats. This demo targets docx and shows how an academic-paper-style document is expressed in the source.)
 
 p(For background see the @link[to:"https://example.com/stem"](project page) or the dedicated paper@footnote(Cho 2026, Stem grammar specification v1.0).)
 
-h2(Layout)
+h2[numbered:true](Layout)
 
 p(The document uses letter-sized pages with one-inch margins on all four sides, a header band carrying the document title, and a footer band with auto-numbering @page-number() / @total-pages() fields.)
 
-h1(Tables)
+h1[numbered:true](Tables)
 
 p(The first table summarizes the FIPS section validation levels.)
 
@@ -50,15 +50,15 @@ table[border:outer, stripe:true, caption:"Supported cryptographic algorithms"]{
   row{ cell(SHA-384) cell(SHA-512/256) }
 }
 
-h1(Cross-references)
+h1[numbered:true](Cross-references)
 
 p(Word will render the table of contents above with live page-number links back to each heading. Heading anchors also work for inline references such as @link[to:"#references"](References).)
 
-h1(Conclusion)
+h1[numbered:true](Conclusion)
 
 p("Stem can now author papers like this directly. The exporter produces a docx that opens cleanly in Word with: page setup, header/footer with page numbers, an auto-generated TOC, bookmarked headings, tables with merged cells and styled rows, hyperlinks (external and anchor), and footnotes.")
 
-h1[id:references](References)
+h1[id:references, numbered:true](References)
 
 ul{
   li(BoringCrypto FIPS 140-2 Security Policy, 2018.)

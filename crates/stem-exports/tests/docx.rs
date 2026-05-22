@@ -483,6 +483,78 @@ fn footer_with_page_number_emits_page_field() {
     assert!(footer_xml.contains("w:fldChar"), "expected fldChar markers: {}", footer_xml);
 }
 
+// --- visual defaults + heading numbering --------------------------------
+
+#[test]
+fn doc_defaults_register_body_font_and_line_spacing() {
+    let bytes = docx_bytes_from_stem("p(hello)");
+    let reader = std::io::Cursor::new(&bytes);
+    let mut zip = zip::ZipArchive::new(reader).expect("zip");
+    let mut styles_xml = String::new();
+    zip.by_name("word/styles.xml")
+        .expect("styles.xml present")
+        .read_to_string(&mut styles_xml)
+        .expect("read");
+    // 1.08x line, 8pt after, Calibri 11pt body.
+    assert!(
+        styles_xml.contains("w:line=\"259\""),
+        "expected default line=259 (1.08x): {}",
+        styles_xml
+    );
+    assert!(styles_xml.contains("w:after=\"160\""), "expected default after=160 (8pt)");
+    assert!(styles_xml.contains("w:ascii=\"Calibri\""), "expected default Calibri font");
+    assert!(styles_xml.contains("w:sz w:val=\"22\""), "expected default size 22 (11pt)");
+}
+
+#[test]
+fn heading_paragraph_carries_keep_next_and_spacing() {
+    let bytes = docx_bytes_from_stem("h1(Chapter One)\n\np(body)\n");
+    let xml = extract_document_xml(&bytes);
+    // The heading paragraph must opt out of widow/orphan separation.
+    assert!(xml.contains("<w:keepNext"), "heading should keep with next: {}", xml);
+    assert!(xml.contains("<w:keepLines"), "heading should keep lines together");
+    // Heading1 spacing: 12pt before, 0 after.
+    assert!(
+        xml.contains("w:before=\"240\""),
+        "expected before=240 spacing on heading: {}",
+        xml
+    );
+}
+
+#[test]
+fn heading_numbered_true_attaches_multilevel_list() {
+    let bytes =
+        docx_bytes_from_stem("h1[numbered:true](One)\nh2[numbered:true](One-one)\nh1[numbered:true](Two)\n");
+    let xml = extract_document_xml(&bytes);
+    // Each numbered heading paragraph references the heading numId.
+    let np_count = xml.matches("<w:numId w:val=\"3\"").count();
+    assert!(np_count >= 3, "expected each numbered heading to reference numId=3, got {}: {}", np_count, xml);
+    // Indent levels: H1 at 0, H2 at 1.
+    assert!(xml.contains("<w:ilvl w:val=\"0\""), "expected H1 at ilvl=0");
+    assert!(xml.contains("<w:ilvl w:val=\"1\""), "expected H2 at ilvl=1");
+}
+
+#[test]
+fn heading_unnumbered_skips_numpr() {
+    let bytes = docx_bytes_from_stem("h1(Plain)\n");
+    let xml = extract_document_xml(&bytes);
+    // No `numbered` prop → no numPr on the heading paragraph.
+    let m = regex_find_heading_paragraph(&xml, "Heading1");
+    assert!(
+        m.is_some() && !m.unwrap().contains("<w:numPr"),
+        "unnumbered heading should not carry numPr"
+    );
+}
+
+/// Tiny helper: pull the first paragraph that uses the given style.
+fn regex_find_heading_paragraph<'a>(xml: &'a str, style_id: &str) -> Option<&'a str> {
+    let needle = format!("w:val=\"{}\"", style_id);
+    let s = xml.find(&needle)?;
+    let p_start = xml[..s].rfind("<w:p ")?;
+    let p_end = xml[p_start..].find("</w:p>")? + p_start + "</w:p>".len();
+    Some(&xml[p_start..p_end])
+}
+
 // --- styles.xml registration (TOC bugfix) -------------------------------
 
 #[test]
