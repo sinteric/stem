@@ -1,9 +1,8 @@
-//! HTML renderer.
+//! HTML exporter.
 //!
 //! Walks a `stem_core::ast::Document` and produces HTML. Per-element
 //! render functions live in the [`elements`] submodule; this file owns
-//! the document walker, sheet rendering, and a fallback match arm for
-//! elements not yet migrated to the per-element layout.
+//! the document walker and the generic fallback for unknown elements.
 
 pub mod elements;
 
@@ -11,15 +10,14 @@ use std::fmt::Write;
 
 use stem_core::ast::*;
 use stem_core::theme::Theme;
-
-use crate::Renderer;
+use stem_core::Exporter;
 
 #[derive(Default)]
-pub struct HtmlRenderer {
+pub struct HtmlExporter {
     pub full_document: bool,
 }
 
-impl HtmlRenderer {
+impl HtmlExporter {
     pub fn new() -> Self {
         Self { full_document: true }
     }
@@ -34,11 +32,13 @@ pub enum HtmlError {
     Write(#[from] std::fmt::Error),
 }
 
-impl HtmlRenderer {
-    pub fn render(&self, doc: &Document, theme: &Theme) -> Result<String, HtmlError> {
+impl Exporter for HtmlExporter {
+    type Output = String;
+    type Error = HtmlError;
+    fn export(&self, doc: &Document, theme: &Theme) -> Result<String, HtmlError> {
         // Run the typed-tree cook pass first — fill/source desugar to
         // cells, same-address cells merge, col/row/format cascade. The
-        // renderer then walks a normalized tree.
+        // exporter then walks a normalized tree.
         let cooked = stem_parser::cook_document(doc);
 
         let mut out = String::new();
@@ -68,18 +68,6 @@ impl HtmlRenderer {
             writeln!(out, "</html>")?;
         }
         Ok(out)
-    }
-}
-
-impl Renderer for HtmlRenderer {
-    type Output = String;
-    type Error = HtmlError;
-    fn render(
-        &self,
-        _doc: &stem_core::ast::Document,
-        _theme: &Theme,
-    ) -> Result<String, Self::Error> {
-        Err(HtmlError::Write(std::fmt::Error))
     }
 }
 

@@ -1,0 +1,26 @@
+[package]
+name = "stem-imports"
+version.workspace = true
+edition.workspace = true
+license.workspace = true
+description = "Import external document formats into the Stem AST — one module per format under cargo features."
+
+[dependencies]
+stem-core = { workspace = true }
+stem-parser = { workspace = true }
+stem-types = { workspace = true }
+thiserror = { workspace = true }
+pulldown-cmark = { version = "0.13", optional = true, default-features = false }
+
+[dev-dependencies]
+stem-exports = { workspace = true, features = ["html"] }
+
+[features]
+default = ["markdown"]
+markdown = ["dep:pulldown-cmark"]
+# Stubs for now; will gain real deps as implementations land.
+docx = []
+xlsx = []
+pptx = []
+hwpx = []
+all = ["markdown", "docx", "xlsx", "pptx", "hwpx"]

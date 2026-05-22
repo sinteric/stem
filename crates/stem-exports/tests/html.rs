@@ -1,12 +1,13 @@
 use stem_core::theme::Theme;
+use stem_core::Exporter;
+use stem_exports::HtmlExporter;
 use stem_parser::parse;
-use stem_render::HtmlRenderer;
 
 fn render(src: &str) -> String {
     let r = parse(src);
     assert!(r.diagnostics.is_empty(), "parse errors: {:?}", r.diagnostics);
-    let h = HtmlRenderer::fragment();
-    h.render(&r.document, &Theme::default()).expect("render")
+    let h = HtmlExporter::fragment();
+    h.export(&r.document, &Theme::default()).expect("export")
 }
 
 #[test]
@@ -210,8 +211,8 @@ fn full_document_renders_doctype_and_locale() {
     let r = parse(r#"[type:document, locale:ko-KR, title:"제목"]
 section{ h1(Hello) p(World.) }"#);
     assert!(r.diagnostics.is_empty(), "{:?}", r.diagnostics);
-    let h = HtmlRenderer::new();
-    let html = h.render(&r.document, &Theme::default()).unwrap();
+    let h = HtmlExporter::new();
+    let html = h.export(&r.document, &Theme::default()).unwrap();
     assert!(html.starts_with("<!doctype html>"));
     assert!(html.contains("lang=\"ko-KR\""));
     assert!(html.contains("<title>제목</title>"));

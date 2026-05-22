@@ -28,8 +28,9 @@ use anyhow::Context;
 use clap::{Parser, Subcommand, ValueEnum};
 
 use stem_core::theme::Theme;
+use stem_core::Exporter;
+use stem_exports::HtmlExporter;
 use stem_parser::parse;
-use stem_render::{HtmlRenderer, Renderer};
 use stem_types::{default_registry, validate};
 
 #[derive(Parser)]
@@ -145,15 +146,15 @@ fn run_render(format: Format) -> ExitCode {
     }
     let theme = Theme::default();
     let bytes: Vec<u8> = match format {
-        Format::Html => match HtmlRenderer::new().render(&r.document, &theme) {
+        Format::Html => match HtmlExporter::new().export(&r.document, &theme) {
             Ok(s) => s.into_bytes(),
             Err(e) => return error_exit(anyhow::Error::from(e)),
         },
-        Format::Docx => match stem_render::DocxRenderer::new().render(&r.document, &theme) {
+        Format::Docx => match stem_exports::DocxExporter::new().export(&r.document, &theme) {
             Ok(b) => b,
             Err(e) => return error_exit(anyhow::Error::from(e)),
         },
-        Format::Pdf => match stem_render::PdfRenderer::new().render(&r.document, &theme) {
+        Format::Pdf => match stem_exports::PdfExporter::new().export(&r.document, &theme) {
             Ok(b) => b,
             Err(e) => return error_exit(anyhow::Error::from(e)),
         },

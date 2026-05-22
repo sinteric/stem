@@ -51,7 +51,7 @@ pub mod text;
 /// Function-pointer signature for an element's HTML render.
 ///
 /// Returns `std::fmt::Error` to match the existing render_inline /
-/// render_block chain; the top-level `HtmlRenderer::render` wraps this
+/// render_block chain; the top-level `HtmlExporter::export` wraps this
 /// in `HtmlError` at the boundary.
 pub type HtmlFn = fn(&mut String, &Block, &Theme) -> Result<(), std::fmt::Error>;
 

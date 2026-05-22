@@ -6,9 +6,11 @@
 
 pub mod ast;
 pub mod diagnostic;
+pub mod io;
 pub mod span;
 pub mod theme;
 
 pub use diagnostic::{Diagnostic, Severity};
+pub use io::{Exporter, Importer};
 pub use span::{Pos, Span};
 pub use theme::{Theme, ThemeColor};

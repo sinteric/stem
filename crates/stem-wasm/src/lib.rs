@@ -8,8 +8,9 @@ use serde::Serialize;
 use wasm_bindgen::prelude::*;
 
 use stem_core::theme::Theme;
+use stem_core::Exporter;
+use stem_exports::HtmlExporter;
 use stem_parser::parse;
-use stem_render::HtmlRenderer;
 use stem_types::{default_registry, validate};
 
 #[derive(Serialize)]
@@ -77,9 +78,9 @@ pub fn render(src: &str) -> JsValue {
         });
     }
 
-    let html = HtmlRenderer::fragment()
-        .render(&parsed.document, &Theme::default())
-        .unwrap_or_else(|e| format!("<pre>render error: {}</pre>", e));
+    let html = HtmlExporter::fragment()
+        .export(&parsed.document, &Theme::default())
+        .unwrap_or_else(|e| format!("<pre>export error: {}</pre>", e));
 
     let stats = Stats {
         nodes: count_nodes(&parsed.document),

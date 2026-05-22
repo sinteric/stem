@@ -6,7 +6,7 @@
 //!
 //! Element definitions live alongside their owning concern. Vocabulary
 //! definitions are in [`crate::elements`]; rendering is per-backend in
-//! `stem-render`.
+//! `stem-exports`.
 //!
 //! Rationale: previously every element was scattered across `schema.rs`
 //! (one big `BUILTINS` array) and per-renderer match arms. Per-element
@@ -45,7 +45,7 @@ impl<'a> DocTypeRef<'a> {
 pub type ValidateFn = fn(&Block, &DocTypeRef) -> Vec<Diagnostic>;
 
 /// Complete definition of a single element from the vocabulary layer's
-/// point of view. Renderer-specific code lives in `stem-render`.
+/// point of view. Renderer-specific code lives in `stem-exports`.
 #[derive(Clone, Debug)]
 pub struct ElementDef {
     pub schema: ElementSchema,

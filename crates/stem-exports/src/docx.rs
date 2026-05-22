@@ -1,4 +1,4 @@
-//! Stub `.docx` renderer. The interface is fully specified; the
+//! Stub `.docx` exporter. The interface is fully specified; the
 //! implementation is intentionally a NotImplemented stub so the workspace
 //! compiles and downstream tools can wire against the type without
 //! pulling in heavy dependencies.
@@ -22,18 +22,17 @@
 //! 4. Inline calls (`text`, `footnote`, `date`) → runs with `rPr` for
 //!    color/weight, footnote reference for `footnote`.
 //!
-//! The trait shape matches `HtmlRenderer` so swapping in a real
+//! The trait shape matches `HtmlExporter` so swapping in a real
 //! implementation is a one-liner at the CLI.
 
 use stem_core::ast::Document;
 use stem_core::theme::Theme;
-
-use crate::Renderer;
+use stem_core::Exporter;
 
 #[derive(Default)]
-pub struct DocxRenderer;
+pub struct DocxExporter;
 
-impl DocxRenderer {
+impl DocxExporter {
     pub fn new() -> Self {
         Self
     }
@@ -41,15 +40,15 @@ impl DocxRenderer {
 
 #[derive(Debug, thiserror::Error)]
 pub enum DocxError {
-    #[error("docx renderer not yet implemented — see crates/stem-render/src/docx.rs for contract")]
+    #[error("docx exporter not yet implemented — see crates/stem-exports/src/docx.rs for contract")]
     NotImplemented,
 }
 
-impl Renderer for DocxRenderer {
+impl Exporter for DocxExporter {
     type Output = Vec<u8>;
     type Error = DocxError;
 
-    fn render(&self, _doc: &Document, _theme: &Theme) -> Result<Vec<u8>, Self::Error> {
+    fn export(&self, _doc: &Document, _theme: &Theme) -> Result<Vec<u8>, Self::Error> {
         Err(DocxError::NotImplemented)
     }
 }

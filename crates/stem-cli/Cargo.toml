@@ -13,6 +13,6 @@ path = "src/main.rs"
 stem-core = { workspace = true }
 stem-parser = { workspace = true }
 stem-types = { workspace = true }
-stem-render = { workspace = true }
+stem-exports = { workspace = true, features = ["html", "docx", "pdf"] }
 clap = { workspace = true }
 anyhow = { workspace = true }

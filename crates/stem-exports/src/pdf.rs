@@ -6,7 +6,7 @@
 //! Two reasonable paths:
 //!
 //! - **HTML → headless Chromium / wkhtmltopdf / weasyprint**: render the
-//!   document with `HtmlRenderer { full_document: true, .. }` and feed
+//!   document with `HtmlExporter { full_document: true, .. }` and feed
 //!   the result into your favourite HTML-to-PDF converter. Cheapest to
 //!   ship and gets all of CSS for free.
 //!
@@ -27,13 +27,12 @@
 
 use stem_core::ast::Document;
 use stem_core::theme::Theme;
-
-use crate::Renderer;
+use stem_core::Exporter;
 
 #[derive(Default)]
-pub struct PdfRenderer;
+pub struct PdfExporter;
 
-impl PdfRenderer {
+impl PdfExporter {
     pub fn new() -> Self {
         Self
     }
@@ -41,15 +40,15 @@ impl PdfRenderer {
 
 #[derive(Debug, thiserror::Error)]
 pub enum PdfError {
-    #[error("pdf renderer not yet implemented — see crates/stem-render/src/pdf.rs for contract")]
+    #[error("pdf exporter not yet implemented — see crates/stem-exports/src/pdf.rs for contract")]
     NotImplemented,
 }
 
-impl Renderer for PdfRenderer {
+impl Exporter for PdfExporter {
     type Output = Vec<u8>;
     type Error = PdfError;
 
-    fn render(&self, _doc: &Document, _theme: &Theme) -> Result<Vec<u8>, Self::Error> {
+    fn export(&self, _doc: &Document, _theme: &Theme) -> Result<Vec<u8>, Self::Error> {
         Err(PdfError::NotImplemented)
     }
 }

@@ -5,7 +5,8 @@ members = [
     "crates/stem-parser",
     "crates/stem-types",
     "crates/stem-lsp",
-    "crates/stem-render",
+    "crates/stem-exports",
+    "crates/stem-imports",
     "crates/stem-cli",
     "crates/stem-wasm",
 ]
@@ -21,7 +22,8 @@ rust-version = "1.75"
 stem-core = { path = "crates/stem-core" }
 stem-parser = { path = "crates/stem-parser" }
 stem-types = { path = "crates/stem-types" }
-stem-render = { path = "crates/stem-render" }
+stem-exports = { path = "crates/stem-exports" }
+stem-imports = { path = "crates/stem-imports" }
 
 serde = { version = "1", features = ["derive"] }
 serde_json = "1"
