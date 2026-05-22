@@ -1,50 +1,53 @@
 [type:document, encoding:utf-8, locale:ko-KR, theme:corporate, title:"2026 Roadmap"]
 
-section(cover)(
-  # 2026 Product Roadmap
-  ## Strategy Team
-  date(2026.05.20)
-)
+section[id:cover]{
+  h1(2026 Product Roadmap)
+  h2(Strategy Team)
+  p(@date(2026.05.20))
+}
 
-section(toc)
+section[id:toc]
 
-section(body)(
-  ## Background
+section[id:body]{
+  h2(Background)
 
-  Existing document ecosystems are text(falling behind)[color:primary]
-  in the AI era. footnote(Gartner 2025 Report)
+  p(Existing document ecosystems are @text[color:primary](falling behind) in the AI era.@footnote(Gartner 2025 Report))
 
-  layout(two-column)(
-    col(
-      ### Problems
-      - Format fragmentation
-      - Hard to generate with AI
-      - Manual conversion work
-    )
-    col(
-      ### Opportunities
-      - Single source format
-      - AI-native design
-      - Auto conversion
-    )
-  )
+  layout[kind:two-column]{
+    col{
+      h3(Problems)
+      ul{
+        li(Format fragmentation)
+        li(Hard to generate with AI)
+        li(Manual conversion work)
+      }
+    }
+    col{
+      h3(Opportunities)
+      ul{
+        li(Single source format)
+        li(AI-native design)
+        li(Auto conversion)
+      }
+    }
+  }
 
-  table[border:outer](
-    row(header)(
+  table[border:outer]{
+    row[kind:header]{
       cell(Phase)
       cell(Content)
-      cell(Timeline)[span:2]
-    )
-    row(
+      cell[colspan:2](Timeline)
+    }
+    row{
       cell(Phase 1)
       cell(Spec finalization)
       cell(2026 Q2)
-      cell(In Progress)[bg:yellow]
-    )
-  )
-)
+      cell[bg:yellow](In Progress)
+    }
+  }
+}
 
-section(closing)(
-  # Thank you
-  note(Contact: contact@example.com)
-)
+section[id:closing]{
+  h1(Thank you)
+  p("Contact: contact@example.com")
+}
