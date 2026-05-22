@@ -317,6 +317,68 @@ fn emit_block(docx: Docx, b: &Block, ctx: &EmitCtx, _depth: usize) -> Result<Doc
     })
 }
 
+/// Hand-build the List-of-Tables / List-of-Figures field. docx-rs's
+/// TableOfContents API ties each item to a ToC{level} paragraph style;
+/// the reference uses `TableofFigures` for both lists. We bypass the
+/// builder and emit the field as plain Word paragraphs:
+///
+///   <p style="TOCHeading">List of Tables</p>
+///   <p style="TableofFigures">
+///     <r><fldChar begin/></r>
+///     <r><instrText> TOC \h \z \c "Table" </instrText></r>
+///     <r><fldChar separate/></r>
+///     <hyperlink anchor="_Toc_table_1"><r>Table 1 – …</r></hyperlink>
+///     ...
+///     <r><fldChar end/></r>
+///   </p>
+fn emit_caption_toc(docx: Docx, ctx: &EmitCtx, kind: CaptionKindTag) -> Docx {
+    let label_word = match kind {
+        CaptionKindTag::Table => "Table",
+        CaptionKindTag::Figure => "Figure",
+    };
+    let heading_label = match kind {
+        CaptionKindTag::Table => "List of Tables",
+        CaptionKindTag::Figure => "List of Figures",
+    };
+    let mut docx = docx.add_paragraph(
+        Paragraph::new()
+            .style("TOCHeading")
+            .add_run(Run::new().add_text(heading_label)),
+    );
+
+    let items: Vec<&CaptionInfo> = ctx.captions.iter().filter(|c| c.kind == kind).collect();
+    if items.is_empty() {
+        return docx;
+    }
+
+    // First entry paragraph also carries the field begin/instr/separate.
+    let instr = format!(" TOC \\h \\z \\c \"{}\" ", label_word);
+    for (i, info) in items.iter().enumerate() {
+        let mut p = Paragraph::new().style("TableofFigures");
+        if i == 0 {
+            p = p.add_run(
+                Run::new()
+                    .add_field_char(FieldCharType::Begin, true)
+                    .add_instr_text(InstrText::Unsupported(instr.clone()))
+                    .add_field_char(FieldCharType::Separate, false),
+            );
+        }
+        // Build the visible "Table N. <text>" — the SEQ number is a
+        // hard literal here (we'd need to track caption numbers
+        // separately). Use the sequence index + 1.
+        let display = format!("{} {}. {}", label_word, i + 1, info.text);
+        // Wrap in a hyperlink to the caption's bookmark.
+        let link = Hyperlink::new(info.bookmark.clone(), HyperlinkType::Anchor)
+            .add_run(Run::new().add_text(display));
+        p = p.add_hyperlink(link);
+        if i == items.len() - 1 {
+            p = p.add_run(Run::new().add_field_char(FieldCharType::End, false));
+        }
+        docx = docx.add_paragraph(p);
+    }
+    docx
+}
+
 /// Parse the optional `levels` property on `section[id:toc]`. Accepts
 /// `"start-end"` (e.g. `1-3`) or a single value `"N"` meaning `1-N`.
 /// Falls back to the full range supported by the schema. Out-of-range
@@ -386,25 +448,7 @@ fn emit_section(docx: Docx, b: &Block, ctx: &EmitCtx) -> Result<Docx, DocxError>
         } else {
             CaptionKindTag::Figure
         };
-        let label = if kind == CaptionKindTag::Table { "Table" } else { "Figure" };
-        let instr = format!(" TOC \\h \\z \\c \"{}\" ", label);
-        let toc = TableOfContents::with_instr_text(&instr)
-            .dirty()
-            .without_sdt()
-            .add_before_paragraph(
-                Paragraph::new()
-                    .style("TOCHeading")
-                    .add_run(Run::new().add_text(if kind == CaptionKindTag::Table {
-                        "List of Tables"
-                    } else {
-                        "List of Figures"
-                    })),
-            );
-        // Intentionally skip pre-populating items here: docx-rs ties
-        // each TableOfContentsItem to a ToC{level} style, but the
-        // reference uses `TableofFigures` for both lists. We rely on
-        // Word's auto-populate-on-open to fill them in.
-        return Ok(docx.add_table_of_contents(toc));
+        return Ok(emit_caption_toc(docx, ctx, kind));
     }
     let mut docx = docx;
     if let Body::Children(children) = &b.body {

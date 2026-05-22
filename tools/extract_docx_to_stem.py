@@ -79,27 +79,31 @@ def extract_first_image(p):
     return (rid, alt)
 
 
-def render_inline_pieces(parent) -> str:
-    """Build a stem-text body string from a paragraph's inline content,
-    converting hyperlinks to @link[...] and bold/italic runs to
-    @text[weight:bold|style:italic](...)."""
+def render_inline_pieces(parent):
+    """Return (body_str, has_inline_elements). body_str is already
+    stem-escaped. If `has_inline_elements`, the body must not be
+    quote-wrapped (it contains valid stem inline syntax that the parser
+    needs to interpret)."""
     parts = []
+    has_inline = False
     for child in parent:
         if child.tag == W+'r':
             txt = get_run_text(child)
             if not txt:
                 continue
-            # Check run properties for bold/italic.
             rPr = child.find(W+'rPr')
             is_bold = rPr is not None and rPr.find(W+'b') is not None
             is_italic = rPr is not None and rPr.find(W+'i') is not None
             esc = stem_escape(txt)
             if is_bold and is_italic:
                 parts.append(f'@text[weight:bold, style:italic]({esc})')
+                has_inline = True
             elif is_bold:
                 parts.append(f'@text[weight:bold]({esc})')
+                has_inline = True
             elif is_italic:
                 parts.append(f'@text[style:italic]({esc})')
+                has_inline = True
             else:
                 parts.append(esc)
             continue
@@ -115,13 +119,15 @@ def render_inline_pieces(parent) -> str:
             esc_label = label.replace('"', '\\"').replace('(', '\\(').replace(')', '\\)')
             if anchor:
                 parts.append(f'@link[to:"#{anchor}"]({esc_label})')
+                has_inline = True
             elif rid and rid in rel_map:
                 target = rel_map[rid][1]
                 parts.append(f'@link[to:"{target}"]({esc_label})')
+                has_inline = True
             else:
                 parts.append(label)
     text = ''.join(parts).strip()
-    return text
+    return text, has_inline
 
 
 def stem_escape(s: str) -> str:
@@ -339,7 +345,7 @@ def emit_paragraph(p, caption_consumes=False):
 
     # Detect inline page break: <w:br w:type="page"/>.
     page_break_run = p.find('.//' + W + 'br' + '[@' + W + 'type="page"]')
-    text = render_inline_pieces(p)
+    text, has_inline = render_inline_pieces(p)
     pre_lines = []
     if page_break_run is not None:
         pre_lines.append('pagebreak')
@@ -352,7 +358,8 @@ def emit_paragraph(p, caption_consumes=False):
 
     # Decide stem element from style.
     if sty == 'Title':
-        return [f'title({escape_text_body(text)})']
+        body = text if has_inline else escape_text_body(text)
+        return [f'title({body})']
 
     if sty and sty.startswith('Heading'):
         m = re.match(r'Heading(\d)', sty)
@@ -368,7 +375,8 @@ def emit_paragraph(p, caption_consumes=False):
                     id_attr = f'id:"{bk_name}"'
             props = ', '.join(x for x in [id_attr, num_attr] if x)
             propblk = f'[{props}]' if props else ''
-            return pre_lines + [f'h{n}{propblk}({escape_text_body(text)})']
+            body = text if has_inline else escape_text_body(text)
+            return pre_lines + [f'h{n}{propblk}({body})']
 
     # Captions are handled by the surrounding loop, not emitted as
     # standalone p().
@@ -378,7 +386,8 @@ def emit_paragraph(p, caption_consumes=False):
     # Default body paragraph (with pre_lines for page breaks).
     if not text.strip():
         return pre_lines
-    return pre_lines + [f'p({escape_text_body(text)})']
+    body = text if has_inline else escape_text_body(text)
+    return pre_lines + [f'p({body})']
 
 
 def caption_text_for(p):
