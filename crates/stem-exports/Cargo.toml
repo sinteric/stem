@@ -13,6 +13,7 @@ thiserror = { workspace = true }
 pulldown-latex = { version = "0.7.1", optional = true }
 printpdf = { version = "0.9.1", optional = true }
 docx-rs = { version = "0.4.20", optional = true }
+rust_xlsxwriter = { version = "0.95.0", optional = true }
 
 [dev-dependencies]
 stem-imports = { workspace = true, features = ["markdown"] }
@@ -24,4 +25,5 @@ html = ["dep:pulldown-latex"]
 markdown = []
 pdf = ["dep:printpdf"]
 docx = ["dep:docx-rs"]
-all = ["html", "markdown", "docx", "pdf"]
+xlsx = ["dep:rust_xlsxwriter"]
+all = ["html", "markdown", "docx", "pdf", "xlsx"]

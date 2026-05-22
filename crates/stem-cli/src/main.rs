@@ -61,6 +61,7 @@ enum Format {
     Html,
     Docx,
     Pdf,
+    Xlsx,
 }
 
 fn main() -> ExitCode {
@@ -155,6 +156,10 @@ fn run_render(format: Format) -> ExitCode {
             Err(e) => return error_exit(anyhow::Error::from(e)),
         },
         Format::Pdf => match stem_exports::PdfExporter::new().export(&r.document, &theme) {
+            Ok(b) => b,
+            Err(e) => return error_exit(anyhow::Error::from(e)),
+        },
+        Format::Xlsx => match stem_exports::XlsxExporter::new().export(&r.document, &theme) {
             Ok(b) => b,
             Err(e) => return error_exit(anyhow::Error::from(e)),
         },

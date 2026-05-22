@@ -23,6 +23,8 @@ pub mod math;
 pub mod markdown;
 #[cfg(feature = "pdf")]
 pub mod pdf;
+#[cfg(feature = "xlsx")]
+pub mod xlsx;
 
 #[cfg(feature = "docx")]
 pub use docx::DocxExporter;
@@ -32,6 +34,8 @@ pub use html::HtmlExporter;
 pub use markdown::MarkdownExporter;
 #[cfg(feature = "pdf")]
 pub use pdf::PdfExporter;
+#[cfg(feature = "xlsx")]
+pub use xlsx::XlsxExporter;
 
 // Re-export the trait so consumers don't need to depend on stem-core
 // just to call exports.
