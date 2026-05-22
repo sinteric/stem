@@ -39,5 +39,8 @@ html = ["dep:pulldown-latex"]
 markdown = []
 pdf = ["dep:printpdf"]
 docx = ["dep:docx-rs", "dep:zip"]
+# In-progress direct-OOXML emitter. Will replace `docx` once it
+# reaches feature parity. Both can be enabled at once during migration.
+docx2 = ["dep:zip"]
 xlsx = ["dep:rust_xlsxwriter"]
-all = ["html", "markdown", "docx", "pdf", "xlsx"]
+all = ["html", "markdown", "docx", "docx2", "pdf", "xlsx"]

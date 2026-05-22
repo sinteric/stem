@@ -15,6 +15,8 @@
 
 #[cfg(feature = "docx")]
 pub mod docx;
+#[cfg(feature = "docx2")]
+pub mod docx2;
 #[cfg(feature = "html")]
 pub mod html;
 #[cfg(feature = "html")]
@@ -28,6 +30,8 @@ pub mod xlsx;
 
 #[cfg(feature = "docx")]
 pub use docx::{DocxError, DocxExporter};
+#[cfg(feature = "docx2")]
+pub use docx2::{DocxV2Error, DocxV2Exporter};
 #[cfg(feature = "html")]
 pub use html::HtmlExporter;
 #[cfg(feature = "markdown")]
