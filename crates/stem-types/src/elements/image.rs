@@ -17,6 +17,12 @@ pub const IMAGE: ElementDef = ElementDef {
             PropertyDef { name: "w", kind: ValueKind::Length, required: false, doc: "Width" },
             PropertyDef { name: "h", kind: ValueKind::Length, required: false, doc: "Height" },
             PropertyDef { name: "caption", kind: ValueKind::String, required: false, doc: "Visible caption" },
+            PropertyDef {
+                name: "float",
+                kind: ValueKind::Enum(&["inline", "anchor", "behind"]),
+                required: false,
+                doc: "Image positioning: inline (in text flow, default), anchor (floats with text wrap), behind (anchored behind text)",
+            },
         ],
         doc: "Image with required alt and optional caption",
     },

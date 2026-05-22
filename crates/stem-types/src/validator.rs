@@ -184,7 +184,7 @@ fn check_value(def: &PropertyDef, prop: &Property, theme: &Theme) -> Option<Diag
         ValueKind::Integer => "an integer".to_string(),
         ValueKind::Bool => "true/false".to_string(),
         ValueKind::Color => "a theme color name or `#rrggbb`".to_string(),
-        ValueKind::Length => "a length (e.g. 12pt, 60%, 100px, auto)".to_string(),
+        ValueKind::Length => "a length (e.g. 12pt, 60%, 100px, 1.5in, auto)".to_string(),
         ValueKind::Address => "an address (A1, B, 5) or quoted range (\"B2:B4\")".to_string(),
         ValueKind::Style => "a marker style".to_string(),
         ValueKind::Enum(vals) => format!("one of [{}]", vals.join(", ")),
@@ -203,8 +203,9 @@ fn is_length(s: &str) -> bool {
     if s == "auto" {
         return true;
     }
-    // Accept N, N.M with optional unit: px, pt, em, rem, %, vw, vh
-    let units = ["px", "pt", "em", "rem", "%", "vw", "vh"];
+    // Accept N, N.M with optional unit: px, pt, em, rem, %, vw, vh,
+    // plus print units in, cm, mm (used by paged-output exporters).
+    let units = ["px", "pt", "em", "rem", "%", "vw", "vh", "in", "cm", "mm"];
     if let Some(num) = units.iter().find_map(|u| s.strip_suffix(u)) {
         return num.parse::<f64>().is_ok();
     }

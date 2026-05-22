@@ -66,17 +66,37 @@ def paragraph_has_drawing(p) -> bool:
 
 
 def extract_first_image(p):
-    """Walk paragraph; return (rid, alt) for the first embedded image."""
+    """Return dict with rid, alt, mode (inline|anchor|behind),
+    width_in, height_in for the first embedded image in p."""
     blip = p.find('.//' + A + 'blip')
     if blip is None:
         return None
     rid = blip.get(R+'embed')
     if not rid:
         return None
-    # Try to find a doc-pr title/descr for alt text.
     docPr = p.find('.//{http://schemas.openxmlformats.org/drawingml/2006/wordprocessingDrawing}docPr')
     alt = (docPr.get('descr') if docPr is not None else None) or (docPr.get('title') if docPr is not None else None) or 'figure'
-    return (rid, alt)
+    drawing = p.find(W+'r/'+W+'drawing') or p.find('.//' + W+'drawing')
+    mode = 'inline'
+    width_in = None
+    height_in = None
+    if drawing is not None:
+        wp_inline = drawing.find('{http://schemas.openxmlformats.org/drawingml/2006/wordprocessingDrawing}inline')
+        wp_anchor = drawing.find('{http://schemas.openxmlformats.org/drawingml/2006/wordprocessingDrawing}anchor')
+        wp_container = wp_inline or wp_anchor
+        if wp_anchor is not None:
+            behind = wp_anchor.get('behindDoc') == '1'
+            mode = 'behind' if behind else 'anchor'
+        if wp_container is not None:
+            ext = wp_container.find('{http://schemas.openxmlformats.org/drawingml/2006/wordprocessingDrawing}extent')
+            if ext is not None:
+                cx = int(ext.get('cx', '0'))
+                cy = int(ext.get('cy', '0'))
+                if cx > 0:
+                    width_in = cx / 914400.0
+                if cy > 0:
+                    height_in = cy / 914400.0
+    return {'rid': rid, 'alt': alt, 'mode': mode, 'w_in': width_in, 'h_in': height_in}
 
 
 def render_inline_pieces(parent):
@@ -424,31 +444,35 @@ while i < len(items):
         if paragraph_has_drawing(el):
             img_info = extract_first_image(el)
             if img_info:
-                rid, alt = img_info
+                rid = img_info['rid']
+                alt = img_info['alt']
                 target = rel_map.get(rid, ('', ''))[1]
                 if target:
                     src_path = 'word/' + target.replace('\\', '/').lstrip('./')
-                    # Save image to assets dir.
                     if src_path in z.namelist():
                         ext = os.path.splitext(src_path)[1] or '.bin'
                         local_name = f'image_{rid}{ext}'
                         local_path = ASSETS_DIR / local_name
                         with open(local_path, 'wb') as f:
                             f.write(z.read(src_path))
-                        # Peek next sibling for Caption.
                         caption = None
                         if i + 1 < len(items) and items[i+1].tag == W+'p':
                             caption = caption_text_for(items[i+1])
-                        # image[src:".../local_name", alt:"..", caption:".."]
                         esc_alt = alt.replace('"', '\\"')
                         rel = str(Path('references/docx/.extracted/boringcrypto_extract/assets') / local_name)
                         props = [f'src:"{rel}"', f'alt:"{esc_alt}"']
+                        if img_info['w_in']:
+                            props.append(f'w:{img_info["w_in"]:.2f}in')
+                        if img_info['h_in']:
+                            props.append(f'h:{img_info["h_in"]:.2f}in')
+                        if img_info['mode'] != 'inline':
+                            props.append(f'float:{img_info["mode"]}')
                         if caption:
                             esc_cap = caption.replace('\\', '\\\\').replace('"', '\\"')
                             props.append(f'caption:"{esc_cap}"')
                         stem_lines.append(f'image[{", ".join(props)}]')
                         if caption:
-                            i += 1  # consume the caption paragraph too
+                            i += 1
                         i += 1
                         continue
         # Regular paragraph (also handles those that are captions but
@@ -541,10 +565,18 @@ for (kind, scope), base in hf_parts.items():
         body_text = re.sub(r'Page\s+\d+', 'Page @page-number()', body_text)
     if has_numpages:
         body_text = re.sub(r'of\s+\d+', 'of @total-pages()', body_text)
-    # Escape for stem text body.
-    esc = body_text.replace('"', '\"')
+    # Use BARE text body so @page-number()/@total-pages() get parsed
+    # as inline elements. Bare bodies require \( \) \@ \\ escapes,
+    # but we have to leave the parens that wrap our inline elements
+    # un-escaped or they become literal parens.
+    # Plan: escape all special chars, then un-escape exactly the
+    # `()` that follow our @page-number / @total-pages markers.
+    bare = body_text.replace('\\', '\\\\').replace('(', '\\(').replace(')', '\\)').replace('@', '\\@')
+    import re as _re
+    # The substituted markers became "\@page-number\(\)" — un-escape.
+    bare = _re.sub(r'\\@(page-number|total-pages)\\\(\\\)', r'@\1()', bare)
     scope_attr = '' if scope == 'default' else f'[scope:{scope}]'
-    hf_lines.append(f'{kind}{scope_attr}{{ p("{esc}") }}')
+    hf_lines.append(f'{kind}{scope_attr}{{ p({bare}) }}')
 
 # Prepend the H/F lines after metadata, before the first content.
 if hf_lines:

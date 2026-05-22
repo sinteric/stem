@@ -5,7 +5,7 @@ header[scope:even]{ p() }
 header{ p() }
 header[scope:first]{ p() }
 footer[scope:even]{ p() }
-footer{ p("Google Inc.  2018 Version 1.7 Page @page-number()  of @total-pages() Public Material – May be reproduced only in its original entirety (without revision).") }
+footer{ p(Google Inc.  2018 Version 1.7 Page @page-number()  of @total-pages() Public Material – May be reproduced only in its original entirety \(without revision\).) }
 footer[scope:first]{ p() }
 
 p()
@@ -41,7 +41,7 @@ p()
 p()
 p()
 p()
-image[src:"references/docx/.extracted/boringcrypto_extract/assets/image_rId8.png", alt:"figure"]
+image[src:"references/docx/.extracted/boringcrypto_extract/assets/image_rId8.png", alt:"figure", w:6.50in, h:1.22in, float:anchor]
 
 pagebreak
 
@@ -181,7 +181,7 @@ p("The module is a software library providing a C-language application program i
 p("The physical cryptographic boundary is the general-purpose computer on which the module is installed. The logical cryptographic boundary of the BoringCrypto module is a single object file named bcm.o which is statically linked to BoringSSL. The module performs no communications other than with the calling application \\(the process that invokes the module services\\) and the host operating system.")
 p(Figure 1 shows the logical relationship of the cryptographic module to the other software and hardware components of the computer.)
 p()
-image[src:"references/docx/.extracted/boringcrypto_extract/assets/image_rId10.png", alt:"figure", caption:"Logical Boundary"]
+image[src:"references/docx/.extracted/boringcrypto_extract/assets/image_rId10.png", alt:"figure", w:3.14in, h:4.28in, caption:"Logical Boundary"]
 pagebreak
 h1[numbered:true](Modes of Operation)
 p(The module supports two modes of operation: Approved and Non-approved. The module will be in FIPS-approved mode when all power up self-tests have completed successfully, and only Approved algorithms are invoked.  See Table 7 below for a list of the supported Approved algorithms and Table 8 for allowed algorithms.  The non-Approved mode is entered when a non-Approved algorithm is invoked.  See Table 9 for a list of non-Approved algorithms.)

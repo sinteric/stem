@@ -1239,6 +1239,14 @@ fn emit_image(docx: Docx, b: &Block, ctx: &EmitCtx) -> Result<Docx, DocxError> {
         (None, None) => {}
     }
 
+    // Float modes: inline (default, in text flow), anchor (floats),
+    // behind (anchored behind text — useful for cover-page logos in
+    // the BoringCrypto reference style).
+    match b.prop_str("float") {
+        Some("anchor") => pic = pic.floating(),
+        Some("behind") => pic = pic.floating().overlapping(),
+        _ => {}
+    }
     let mut docx = docx.add_paragraph(Paragraph::new().add_run(Run::new().add_image(pic)));
     if let Some(caption) = b.prop_str("caption") {
         docx = docx.add_paragraph(caption_paragraph(CaptionKind::Figure, caption, ctx));
@@ -1830,16 +1838,17 @@ fn register_styles(mut docx: Docx) -> Docx {
         docx = docx.add_style(style);
     }
 
-    // Title: cover page; larger, centered, deep accent color.
+    // Title: cover page. Reference uses 18pt bold black, centered,
+    // default body font — not a deep-accent display style. Sized
+    // 36 hp (18pt). Bold via the style's run-property bold flag.
     let title = Style::new("Title", StyleType::Paragraph)
         .name("Title")
         .based_on("Normal")
         .next("Normal")
         .q_format(true)
         .ui_priority(10)
-        .color("2E74B5")
-        .fonts(RunFonts::new().ascii("Calibri Light").hi_ansi("Calibri Light"))
-        .size(56);
+        .bold()
+        .size(36);
     docx = docx.add_style(title);
 
     // TableofFigures — Word's built-in style for the List-of-Tables
