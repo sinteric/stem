@@ -551,6 +551,10 @@ for j, line in enumerate(stem_lines):
         final.append('')
         final.append('section[id:toc]')
         final.append('')
+        final.append('section[id:list-of-tables]')
+        final.append('')
+        final.append('section[id:list-of-figures]')
+        final.append('')
         final.append('pagebreak')
         final.append('')
         inserted_toc = True

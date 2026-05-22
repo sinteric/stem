@@ -101,6 +101,7 @@ impl Exporter for DocxExporter {
         out = register_styles(out);
 
         let headings = collect_headings(&cooked.blocks);
+        let captions = collect_captions(&cooked.blocks);
         let n_headings = headings.len();
         let ctx = EmitCtx {
             theme,
@@ -112,6 +113,7 @@ impl Exporter for DocxExporter {
             bookmark_id: std::cell::Cell::new(n_headings + 1),
             table_caption_seq: std::cell::Cell::new(0),
             figure_caption_seq: std::cell::Cell::new(0),
+            captions,
         };
 
         // Apply doc-level page setup from metadata. The schema gives
@@ -181,6 +183,69 @@ struct EmitCtx<'a> {
     /// of Tables/Figures" find each caption.
     table_caption_seq: std::cell::Cell<usize>,
     figure_caption_seq: std::cell::Cell<usize>,
+    /// Pre-walked caption outline. Currently retained so a future
+    /// pass can pre-populate the List-of-Tables / List-of-Figures
+    /// fields with explicit items styled `TableofFigures` (the
+    /// reference uses that style for both lists; docx-rs's
+    /// `TableOfContentsItem` is locked to `ToC{level}`).
+    #[allow(dead_code)]
+    captions: Vec<CaptionInfo>,
+}
+
+#[derive(Clone)]
+#[allow(dead_code)]
+struct CaptionInfo {
+    kind: CaptionKindTag,
+    text: String,
+    bookmark: String,
+}
+
+#[derive(Clone, Copy, PartialEq, Eq)]
+enum CaptionKindTag {
+    Table,
+    Figure,
+}
+
+fn collect_captions(blocks: &[Block]) -> Vec<CaptionInfo> {
+    let mut out: Vec<CaptionInfo> = Vec::new();
+    fn walk(blocks: &[Block], out: &mut Vec<CaptionInfo>) {
+        let mut t_seq = 0;
+        let mut f_seq = 0;
+        for b in blocks {
+            match b.name.as_str() {
+                "table" => {
+                    if let Some(c) = b.prop_str("caption") {
+                        t_seq += 1;
+                        out.push(CaptionInfo {
+                            kind: CaptionKindTag::Table,
+                            text: c.to_string(),
+                            bookmark: format!("_Toc_table_{}", t_seq),
+                        });
+                    }
+                }
+                "image" => {
+                    if let Some(c) = b.prop_str("caption") {
+                        f_seq += 1;
+                        out.push(CaptionInfo {
+                            kind: CaptionKindTag::Figure,
+                            text: c.to_string(),
+                            bookmark: format!("_Toc_figure_{}", f_seq),
+                        });
+                    }
+                }
+                _ => {
+                    if let Body::Children(children) = &b.body {
+                        walk(children, out);
+                    }
+                }
+            }
+        }
+        // Restore counters by depth-position — emitting is in document
+        // order so we don't strictly need scoping.
+        let _ = (t_seq, f_seq);
+    }
+    walk(blocks, &mut out);
+    out
 }
 
 /// One entry in the pre-walked heading outline. The bookmark name is
@@ -312,6 +377,33 @@ fn emit_section(docx: Docx, b: &Block, ctx: &EmitCtx) -> Result<Docx, DocxError>
         // docx-rs always appends an extra TOC{N}-styled paragraph
         // carrying the field's `end` marker. The repair pass strips
         // its pStyle so the heading-style count stays correct.
+        return Ok(docx.add_table_of_contents(toc));
+    }
+    // Reserved IDs for caption-based TOCs (List of Tables / Figures).
+    if id == Some("list-of-tables") || id == Some("list-of-figures") {
+        let kind = if id == Some("list-of-tables") {
+            CaptionKindTag::Table
+        } else {
+            CaptionKindTag::Figure
+        };
+        let label = if kind == CaptionKindTag::Table { "Table" } else { "Figure" };
+        let instr = format!(" TOC \\h \\z \\c \"{}\" ", label);
+        let toc = TableOfContents::with_instr_text(&instr)
+            .dirty()
+            .without_sdt()
+            .add_before_paragraph(
+                Paragraph::new()
+                    .style("TOCHeading")
+                    .add_run(Run::new().add_text(if kind == CaptionKindTag::Table {
+                        "List of Tables"
+                    } else {
+                        "List of Figures"
+                    })),
+            );
+        // Intentionally skip pre-populating items here: docx-rs ties
+        // each TableOfContentsItem to a ToC{level} style, but the
+        // reference uses `TableofFigures` for both lists. We rely on
+        // Word's auto-populate-on-open to fill them in.
         return Ok(docx.add_table_of_contents(toc));
     }
     let mut docx = docx;
@@ -1661,6 +1753,16 @@ fn register_styles(mut docx: Docx) -> Docx {
         .fonts(RunFonts::new().ascii("Calibri Light").hi_ansi("Calibri Light"))
         .size(56);
     docx = docx.add_style(title);
+
+    // TableofFigures — Word's built-in style for the List-of-Tables
+    // / List-of-Figures entries. Visually similar to TOC1 but stays
+    // out of the regular heading-TOC.
+    let tof = Style::new("TableofFigures", StyleType::Paragraph)
+        .name("table of figures")
+        .based_on("Normal")
+        .next("Normal")
+        .ui_priority(45);
+    docx = docx.add_style(tof);
 
     // TOCHeading — the visible "Table of Contents" label that sits
     // immediately above the TOC field. Looks like Heading1 but has no

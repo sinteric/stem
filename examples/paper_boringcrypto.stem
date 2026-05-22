@@ -47,6 +47,10 @@ pagebreak
 
 section[id:toc]
 
+section[id:list-of-tables]
+
+section[id:list-of-figures]
+
 pagebreak
 
 h1(Introduction)
