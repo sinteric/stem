@@ -111,8 +111,8 @@ h1[numbered:true](FIPS 140-2 Security Levels)
 p(The following table lists the level of validation for each area in FIPS 140-2:)
 table[border:all, caption:"Validation Level by FIPS 140-2 Section"]{
   row[kind:header]{
-    cell[align:center](FIPS 140-2 Section Title)
-    cell[align:center](Validation Level)
+    cell[align:center](@text[weight:bold](FIPS 140-2 Section Title))
+    cell[align:center](@text[weight:bold](Validation Level))
   }
   row{
     cell(Cryptographic Module Specification)
@@ -178,9 +178,9 @@ h1[numbered:true](Cryptographic Module Ports and Interfaces)
 p(The Data Input interface consists of the input parameters of the API functions. The Data Output interface consists of the output parameters of the API functions. The Control Input interface consists of the actual API input parameters. The Status Output interface includes the return values of the API functions.)
 table[border:all, caption:"Ports and Interfaces"]{
   row[kind:header]{
-    cell[align:center](FIPS Interface)
-    cell[align:center](Physical Ports)
-    cell[align:center](Logical Interfaces)
+    cell[align:center](@text[weight:bold](FIPS Interface))
+    cell[align:center](@text[weight:bold](Physical Ports))
+    cell[align:center](@text[weight:bold](Logical Interfaces))
   }
   row{
     cell(Data Input)
@@ -215,11 +215,11 @@ p("The cryptographic module implements both User and Crypto Officer \\(CO\\) rol
 p(The Approved services supported by the module and access rights within services accessible over the module’s public interface are listed in the table below.)
 table[border:all, caption:"Approved Services, Roles and Access Rights"]{
   row[kind:header]{
-    cell[align:center](Service)
-    cell[align:center](Approved security functions)
-    cell[align:center](Keys and/or CSPs)
-    cell[align:center](Roles)
-    cell[align:center](Access rights to keys and/or CSPs)
+    cell[align:center](@text[weight:bold](Service))
+    cell[align:center](@text[weight:bold](Approved security functions))
+    cell[align:center](@text[weight:bold](Keys) @text[weight:bold]( and/or CSPs))
+    cell[align:center](@text[weight:bold](Roles))
+    cell[align:center](@text[weight:bold](Access rights to keys and/or CSPs))
   }
   row{
     cell(Module Initialization)
@@ -309,10 +309,10 @@ table[border:all, caption:"Approved Services, Roles and Access Rights"]{
 p(The module provides the following non-Approved services which utilize algorithms listed in Table 9:)
 table[border:all, caption:"non-Approved or non-security relevant services"]{
   row[kind:header]{
-    cell[align:center](Service)
-    cell[align:center](Non-Approved Functions)
-    cell[align:center](Roles)
-    cell[align:center](Keys and/or CSPs)
+    cell[align:center](@text[weight:bold](Service))
+    cell[align:center](@text[weight:bold](Non-Approved Functions))
+    cell[align:center](@text[weight:bold](Roles))
+    cell[align:center](@text[weight:bold](Keys) @text[weight:bold]( and/or CSPs))
   }
   row{
     cell(Symmetric encryption/decryption)
@@ -348,10 +348,10 @@ table[border:all, caption:"non-Approved or non-security relevant services"]{
 p(The module also provides the following non-Approved or non-security relevant services over a non-public interface:)
 table[border:all, caption:"Non-Security Relevant Services"]{
   row[kind:header]{
-    cell[align:center](Service)
-    cell[align:center](Approved Security Functions)
-    cell[align:center](Roles)
-    cell[align:center](Access rights to keys and/or CSPs)
+    cell[align:center](@text[weight:bold](Service))
+    cell[align:center](@text[weight:bold](Approved Security) @text[weight:bold](Functions))
+    cell[align:center](@text[weight:bold](Roles))
+    cell[align:center](@text[weight:bold](Access rights to keys) @text[weight:bold]( and/or CSPs))
   }
   row{
     cell(Large integer operations)
@@ -382,11 +382,11 @@ h2[numbered:true](Approved Cryptographic Algorithms)
 p(The module implements the following FIPS 140-2 Approved algorithms:)
 table[border:all, caption:"Approved Algorithms and CAVP Certificates"]{
   row[kind:header]{
-    cell[align:center](CAVP Cert #)
-    cell[align:center](Algorithm)
-    cell[align:center](Standard)
-    cell[align:center](Mode/Method)
-    cell[align:center](Use)
+    cell[align:center](@text[weight:bold](CAVP Cert #))
+    cell[align:center](@text[weight:bold](Algorithm))
+    cell[align:center](@text[weight:bold](Standard))
+    cell[align:center](@text[weight:bold](Mode/Method))
+    cell[align:center](@text[weight:bold](Use))
   }
   row{
     cell[align:center](5612)
@@ -472,8 +472,8 @@ h2[numbered:true](Allowed Cryptographic Algorithms)
 p(The module supports the following non-FIPS 140-2 Approved but allowed algorithms that may be used in the Approved mode of operation.)
 table[border:all, caption:"Allowed Algorithms"]{
   row[kind:header]{
-    cell(Algorithm)
-    cell(Use)
+    cell(@text[weight:bold](Algorithm))
+    cell(@text[weight:bold](Use))
   }
   row{
     cell(EC Diffie-Hellman)
@@ -516,112 +516,112 @@ h2[numbered:true](Cryptographic Key Management)
 p(The table below provides a complete list of Private Keys and CSPs used by the module:)
 table[border:all, caption:"Keys and CSPs supported"]{
   row[kind:header]{
-    cell(Key/CSP Name)
-    cell(Key Description)
-    cell(Generated/ Input)
-    cell(Output)
+    cell(@text[weight:bold](Key/CSP Name))
+    cell(@text[weight:bold](Key Description ))
+    cell(@text[weight:bold](Generated/ Input))
+    cell(@text[weight:bold](Output))
   }
   row{
-    cell(AES Key)
-    cell(AES \(128/192/256\) encrypt / decrypt key)
-    cell(Input via API in plaintext)
-    cell(Output via API in plaintext)
+    cell(@text[weight:bold](AES Key))
+    cell(@text[weight:bold](AES \(128/192/256\) encrypt / decrypt key))
+    cell(@text[weight:bold](Input via API in plaintext))
+    cell(@text[weight:bold](Output via API in plaintext))
   }
   row{
-    cell(AES-GCM Key)
-    cell(AES \(128/192/256\) encrypt / decrypt / generate / verify key)
-    cell(Input via API in plaintext)
-    cell(Output via API in plaintext)
+    cell(@text[weight:bold](AES-GCM) @text[weight:bold]( Key))
+    cell(@text[weight:bold](AES \(128/192/256\) encrypt / decrypt / generate / verify key))
+    cell(@text[weight:bold](Input via API in plaintext))
+    cell(@text[weight:bold](Output via API in plaintext))
   }
   row{
-    cell(A ES Wrapping Key)
-    cell(AES \(128/192/256\) key wrapping key)
-    cell(Input via API in plaintext)
-    cell(Output via API in plaintext)
+    cell(@text[weight:bold](A) @text[weight:bold](ES Wrapping Key))
+    cell(@text[weight:bold](AES \(128/192/256\) key wrapping key))
+    cell(@text[weight:bold](Input via API in plaintext))
+    cell(@text[weight:bold](Output via API in plaintext))
   }
   row{
-    cell(Triple-DES Key)
-    cell(Triple-DES \(3-Key\) encrypt / decrypt key)
-    cell(Input via API in plaintext)
-    cell(Output via API in plaintext)
+    cell(@text[weight:bold](Triple-DES Key))
+    cell(@text[weight:bold](Triple-DES \(3-Key\) encrypt / decrypt key))
+    cell(@text[weight:bold](Input via API in plaintext))
+    cell(@text[weight:bold](Output via API in plaintext))
   }
   row{
-    cell(ECDSA Signing Key)
-    cell(ECDSA \( P-224/P-256/P-384/ P-521 \) signature generation key)
-    cell(Internally Generated or input via API in plaintext)
-    cell(Output via API in plaintext)
+    cell(@text[weight:bold](ECDSA ) @text[weight:bold](Signing ) @text[weight:bold](Key))
+    cell(@text[weight:bold](ECDSA \() @text[weight:bold](P-224/P-256/P-384/) @text[weight:bold](P-521) @text[weight:bold](\) signature generation key))
+    cell(@text[weight:bold](Internally Generated or input via API in plaintext))
+    cell(@text[weight:bold](Output via API in plaintext))
   }
   row{
-    cell(EC DH Private Key)
-    cell(EC DH \( P-224/P-256/P-384/ P-521 \) private key)
-    cell(Internally Generated or input via API in plaintext)
-    cell(Output via API in plaintext)
+    cell(@text[weight:bold](EC DH) @text[weight:bold]( Private Key))
+    cell(@text[weight:bold](EC DH \() @text[weight:bold](P-224/P-256/P-384/) @text[weight:bold](P-521) @text[weight:bold](\)) @text[weight:bold]( private key))
+    cell(@text[weight:bold](Internally Generated or input via API in plaintext))
+    cell(@text[weight:bold](Output via API in plaintext))
   }
   row{
-    cell(HMAC Key)
-    cell(Keyed hash key \(160/224/256/384/512\))
-    cell(Input via API in plaintext)
-    cell(Output via API in plaintext)
+    cell(@text[weight:bold](HMAC Key))
+    cell(@text[weight:bold](Keyed hash key \(160/224/256/384/512\)))
+    cell(@text[weight:bold](Input via API in plaintext))
+    cell(@text[weight:bold](Output via API in plaintext))
   }
   row{
-    cell(RSA Key \(Key Transport\))
-    cell(RSA \(2048 to 16384 bits\) key decryption \(private key transport\) key)
-    cell(Internally Generated or input via API in plaintext)
-    cell(Output via API in plaintext)
+    cell(@text[weight:bold](RSA Key \(Key Transport\)))
+    cell(@text[weight:bold](RSA \(2048 to 16384 bits\) key decryption \(private key transport\) key))
+    cell(@text[weight:bold](Internally Generated or input via API in plaintext))
+    cell(@text[weight:bold](Output via API in plaintext))
   }
   row{
-    cell(RSA Signature Generation Key)
-    cell(RSA \(2048 to 16384 bits\) signature generation key)
-    cell(Internally Generated or input via API in plaintext)
-    cell(Output via API in plaintext)
+    cell(@text[weight:bold](RSA Signature Generation Key))
+    cell(@text[weight:bold](RSA \(2048 to 16384 bits\) signature generation key))
+    cell(@text[weight:bold](Internally Generated or input via API in plaintext))
+    cell(@text[weight:bold](Output via API in plaintext))
   }
   row{
-    cell(TLS Master Secret)
-    cell(Shared Secret; 48 bytes of pseudo-random data)
-    cell(Internally Derived via key derivation function defined in SP 800-135 KDF \(TLS\).)
-    cell(Output via API in plaintext)
+    cell(@text[weight:bold](TLS Master Secret))
+    cell(@text[weight:bold](Shared Secret; ) @text[weight:bold](48 bytes of pseudo-random data))
+    cell(@text[weight:bold](Internally ) @text[weight:bold](Derived via key derivation function defined in SP) @text[weight:bold]( ) @text[weight:bold](800-135 KDF \(TLS\).))
+    cell(@text[weight:bold](Output via API in plaintext))
   }
   row{
-    cell(CTR_DRBG V \( Seed \))
-    cell(128 bits)
-    cell(Internally Generated)
-    cell(Does not exit the module)
+    cell(@text[weight:bold](CTR_DRBG V ) @text[weight:bold](\() @text[weight:bold](Seed) @text[weight:bold](\)))
+    cell(@text[weight:bold](128) @text[weight:bold]( bits))
+    cell(@text[weight:bold](Internally Generated))
+    cell(@text[weight:bold](Does not exit the module))
   }
   row{
-    cell(CTR_DRBG Key)
-    cell(256 bits)
-    cell(Internally Generated)
-    cell(Does not exit the module)
+    cell(@text[weight:bold](CTR_DRBG ) @text[weight:bold](Key))
+    cell(@text[weight:bold](256) @text[weight:bold]( bits))
+    cell(@text[weight:bold](Internally Generated))
+    cell(@text[weight:bold](Does not exit ) @text[weight:bold](the module))
   }
   row{
-    cell(CTR_DRBG Entropy Input)
-    cell(384 bits)
-    cell(Input via API in plaintext)
-    cell(Does not exit the module)
+    cell(@text[weight:bold](CTR_DRBG Entropy Input))
+    cell(@text[weight:bold](384 bits))
+    cell(@text[weight:bold](Input via API in plaintext))
+    cell(@text[weight:bold](Does not exit the module))
   }
 }
 h2[numbered:true](Public Keys)
 p(The table below provides a complete list of the Public keys used by the module:)
 table[border:all, caption:"Public keys supported"]{
   row[kind:header]{
-    cell(Public Key Name)
-    cell(Key Description)
+    cell(@text[weight:bold](Public Key Name))
+    cell(@text[weight:bold](Key Description ))
   }
   row{
-    cell(ECDSA Verification Key)
-    cell(ECDSA \(P-224/P-256/P-384/ P-521 \) signature verification key)
+    cell(@text[weight:bold](ECDSA Verification Key))
+    cell(@text[weight:bold](ECDSA) @text[weight:bold]( \(P-224/P-256/P-384/) @text[weight:bold](P-521) @text[weight:bold](\) ) @text[weight:bold](signature) @text[weight:bold]( verification) @text[weight:bold]( key))
   }
   row{
-    cell(EC DH Public Key)
-    cell(EC DH \(P-224/P-256/P-384/ P-521 \) public key)
+    cell(@text[weight:bold](EC DH ) @text[weight:bold](Public Key))
+    cell(@text[weight:bold](EC DH \(P-224/P-256/P-384/) @text[weight:bold](P-521) @text[weight:bold](\)) @text[weight:bold]( public key))
   }
   row{
-    cell(RSA Key \(Key Transport\))
-    cell(RSA \(2048 to 16384 bits\) key encryption \(public key transport\) key)
+    cell(@text[weight:bold](RSA Key \(Key Transport\)))
+    cell(@text[weight:bold](RSA \(2048 to 16384 bits\) key encryption \(public key transport\) key))
   }
   row{
-    cell(RSA Signature Verification Key)
-    cell(RSA \(1024 to 16384 bits\) signature verification public key)
+    cell(@text[weight:bold](RSA Signature Verification Key))
+    cell(@text[weight:bold](RSA \(1024 to 16384 bits\) signature verification public key))
   }
 }
 h2[numbered:true](Key Generation)
@@ -639,37 +639,37 @@ p(Power-on self-tests are run upon the initialization of the module and do not r
 p(The module implements the following power-on self-tests:)
 table[border:all, caption:"Power-on Self-tests"]{
   row[kind:header]{
-    cell(Type)
-    cell(Test)
+    cell(@text[weight:bold](Type))
+    cell(@text[weight:bold](Test))
   }
   row{
-    cell(Integrity Test)
-    cell(HMAC-SHA-512)
+    cell(@text[weight:bold](Integrity Test))
+    cell(@text[weight:bold](HMAC-SHA-512))
   }
   row{
-    cell(Known Answer Test)
-    cell(AES KAT \(encryption and decryption. Key size: 128-bits\))
+    cell(@text[weight:bold](Known Answer Test))
+    cell(@text[weight:bold](AES KAT \(encryption and decryption. Key size: 128-bits\)))
   }
   row{
-    cell(AES-GCM KAT \(encryption and decryption. Key size: 128-bits\))
+    cell(@text[weight:bold](AES-GCM KAT \(encryption and decryption. Key size: 128-bits\)))
   }
   row{
-    cell(Triple-DES KAT \(encryption and decryption. Key size: 168-bits\))
+    cell(@text[weight:bold](Triple-DES KAT \(encryption and decryption. Key size: 168-bits\)))
   }
   row{
-    cell(ECDSA KAT \(signature generation/signature verification. Curve: P-256\))
+    cell(@text[weight:bold](ECDSA KAT \(signature generation/signature verification. Curve: P-256\) ))
   }
   row{
-    cell(HMAC KAT \(HMAC-SHA-1, HMAC-SHA-512\))
+    cell(@text[weight:bold](HMAC KAT \(HMAC-SHA-1, HMAC-SHA-512\)))
   }
   row{
-    cell(SP 800-90A CTR_DRBG KAT \(Key size: 256-bits\))
+    cell(@text[weight:bold](SP 800-90A CTR_DRBG KAT \(Key size: 256-bits\)))
   }
   row{
-    cell(RSA KAT \(signature generation/signature verification and encryption/decryption. Key size: 2048-bit\))
+    cell(@text[weight:bold](RSA KAT \(signature generation/signature verification and encryption/decryption. Key size: 2048-bit\)))
   }
   row{
-    cell(SHA KAT \(SHA-1, SHA-256, SHA-512\))
+    cell(@text[weight:bold](SHA KAT \(SHA-1, SHA-256, SHA-512\)))
   }
 }
 p(Each module performs all power-on self-tests automatically when the module is initialized. All power-on self-tests must be passed before a User/Crypto Officer can perform services. The Power-on self-tests can be run on demand by power-cycling the host platform.)
@@ -677,20 +677,20 @@ h2[numbered:true](Conditional Self-Tests)
 p(Conditional self-tests are run during operation of the module.  If any of these tests fail, the module will enter an error state, where no services can be accessed by the operators. The module can be re-initialized to clear the error and resume FIPS mode of operation. Each module performs the following conditional self-tests:)
 table[border:all, caption:"Conditional Self-tests"]{
   row[kind:header]{
-    cell(Type)
-    cell(Test)
+    cell(@text[weight:bold](Type))
+    cell(@text[weight:bold](Test))
   }
   row{
-    cell(Pair-wise Consistency Test)
-    cell(ECDSA Key P air generation RSA Key Pair generation)
+    cell(@text[weight:bold](Pair-wise Consistency Test))
+    cell(@text[weight:bold](ECDSA Key P) @text[weight:bold](air generation) @text[weight:bold](RSA Key Pair generation))
   }
   row{
-    cell(CRNGT)
-    cell(Performed on NDRNG per IG 9.8)
+    cell(@text[weight:bold](CRNGT))
+    cell(@text[weight:bold](Performed on NDRNG per IG 9.8))
   }
   row{
-    cell(DRBG Health Tests)
-    cell(Performed on DRBG, per SP 800‐90A Section 11.3. Required per IG C.1.)
+    cell(@text[weight:bold](DRBG Health Tests))
+    cell(@text[weight:bold](Performed on DRBG, per SP 800‐90A Section 11.3. Required per IG C.1. ))
   }
 }
 p(Pairwise consistency tests are performed for both possible modes of use, e.g. Sign/Verify and Encrypt/Decrypt.)
@@ -710,7 +710,7 @@ p("Ninja build system version 1.8.2 \\(https://github.com/ninja-build/ninja/rele
 p()
 p(Once the above tools have been obtained, issue the following command to create a CMake toolchain file to specify the use of Clang:)
 p()
-p("printf \"set\\(CMAKE_C_COMPILER \\\\\"clang\\\\\"\\)\\\\nset\\(CMAKE_CXX_COMPILER \\\\\"clang++\\\\\"\\)\\\\n\" > $\\{HOME\\}/toolchain")
+p("printf \"set\\(CMAKE_C_COMPILER \\\\\"clang\\\\\"\\)\\\\nset\\(CMAKE_CXX_COMPILER \\\\\"clang++\\\\\"\\)\\\\n\" > ${HOME}/toolchain")
 p()
 p(The FIPS 140-2 validated release of the module can be obtained by downloading the tarball containing the source code at the following location:)
 p()
@@ -733,7 +733,7 @@ p()
 p(After the tarball has been extracted, the following commands will compile the module:)
 p()
 p(cd boringssl)
-p("mkdir build && cd build && cmake -GNinja -DCMAKE_TOOLCHAIN_FILE=$\\{HOME\\}/toolchain -DFIPS=1 -DCMAKE_BUILD_TYPE=Release ..")
+p("mkdir build && cd build && cmake -GNinja -DCMAKE_TOOLCHAIN_FILE=${HOME}/toolchain -DFIPS=1 -DCMAKE_BUILD_TYPE=Release ..")
 p(ninja)
 p(ninja run_tests)
 p()
@@ -766,8 +766,8 @@ h1[numbered:true](References and Standards)
 p(The following Standards are referred to in this Security Policy.)
 table[border:all, caption:"References and Standards"]{
   row[kind:header]{
-    cell[align:center](Abbreviation)
-    cell[align:center](Full Specification Name)
+    cell[align:center](@text[weight:bold](Abbreviation))
+    cell[align:center](@text[weight:bold](Full Specification Name))
   }
   row{
     cell[valign:middle](FIPS 140-2)
@@ -821,8 +821,8 @@ table[border:all, caption:"References and Standards"]{
 h1[numbered:true](Acronyms and Definitions)
 table[border:all, caption:"Acronyms and Definitions"]{
   row[kind:header]{
-    cell[align:center](Acronym)
-    cell[align:center](Definition)
+    cell[align:center](@text[weight:bold](Acronym))
+    cell[align:center](@text[weight:bold](Definition))
   }
   row{
     cell(AES)

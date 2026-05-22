@@ -126,26 +126,40 @@ def render_inline_pieces(parent) -> str:
 
 def stem_escape(s: str) -> str:
     """Escape text-body literal so the stem parser doesn't choke.
-    `(`/`)`/`{`/`}`/`[`/`]`/`@`/`\\` need backslash escapes inside a
-    bare body. The caller decides whether to wrap with quotes."""
+    Per docs/grammar.md §3.1, bare text bodies only honour the
+    four escapes \(, \), \@, \\. Brackets and braces are literal
+    inside (...)."""
     return (
         s.replace('\\', '\\\\')
          .replace('(', '\\(')
          .replace(')', '\\)')
-         .replace('[', '\\[')
-         .replace(']', '\\]')
-         .replace('{', '\\{')
-         .replace('}', '\\}')
          .replace('@', '\\@')
     )
 
 
 def cell_text(tc) -> str:
+    """Render a table cell's body, preserving bold/italic inline runs
+    via @text spans. Joins multi-paragraph cell content with a space."""
     parts = []
-    for t in tc.iter(W+'t'):
-        parts.append(t.text or '')
-    s = ' '.join(parts)
-    return re.sub(r'\s+', ' ', s).strip()
+    for r in tc.iter(W+'r'):
+        txt = ''.join(t.text or '' for t in r.iter(W+'t'))
+        if not txt:
+            continue
+        rPr = r.find(W+'rPr')
+        is_bold = rPr is not None and rPr.find(W+'b') is not None
+        is_italic = rPr is not None and rPr.find(W+'i') is not None
+        esc = stem_escape(txt)
+        if is_bold and is_italic:
+            parts.append(f'@text[weight:bold, style:italic]({esc})')
+        elif is_bold:
+            parts.append(f'@text[weight:bold]({esc})')
+        elif is_italic:
+            parts.append(f'@text[style:italic]({esc})')
+        else:
+            parts.append(esc)
+    out = ' '.join(parts)
+    # Collapse internal whitespace runs but preserve our @text() blocks.
+    return re.sub(r'  +', ' ', out).strip()
 
 
 def table_to_stem(tbl, caption=None, indent=0):
@@ -209,7 +223,7 @@ def table_to_stem(tbl, caption=None, indent=0):
             # The OOXML data doesn't give us a direct rowspan, so we leave
             # rowspan to manual fixup pass.
             cprop_str = '[' + ', '.join(cprops) + ']' if cprops else ''
-            body_txt = stem_escape(txt) if txt else ''
+            body_txt = txt  # cell_text already escapes & wraps @text spans
             if body_txt:
                 out.append(f'{sp}    cell{cprop_str}({body_txt})')
             else:
