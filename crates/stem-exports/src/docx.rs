@@ -481,13 +481,22 @@ fn emit_section(docx: Docx, b: &Block, ctx: &EmitCtx) -> Result<Docx, DocxError>
 }
 
 fn title_para(b: &Block) -> Paragraph {
-    let mut p = Paragraph::new().style("Title");
+    let mut p = Paragraph::new()
+        .style("Title")
+        // Tighter spacing than the body default (8pt after). The
+        // BoringCrypto reference uses spacing-after=120 (6pt) and
+        // a single-line height on Title paragraphs.
+        .line_spacing(
+            LineSpacing::new()
+                .line_rule(LineSpacingType::Auto)
+                .line(240)
+                .after(120),
+        );
     if let Some(align) = b.prop_str("align") {
         if let Some(a) = parse_alignment(align) {
             p = p.align(a);
         }
     } else {
-        // Match Word's default Title style which is centered.
         p = p.align(AlignmentType::Center);
     }
     apply_pieces(p, collect_pieces(b, RunStyle::default()))
@@ -1435,6 +1444,7 @@ fn repair_ooxml_ordering(bytes: Vec<u8>) -> Result<Vec<u8>, DocxError> {
                 let s = normalize_toc_style_casing(&s);
                 let s = strip_toc_end_pstyle(&s);
                 let s = inject_word_housekeeping_bookmarks(&s, &name);
+                let s = strip_unwanted_section_flags(&s, &name);
                 s.into_bytes()
             } else {
                 contents
@@ -1481,6 +1491,20 @@ fn repair_ppr_xml(xml: &str) -> String {
         }
         out
     })
+}
+
+/// Strip `<w:titlePg/>` from sectPr. docx-rs's `first_footer` /
+/// `first_header` builders unconditionally set the title-page flag,
+/// which makes Word use the empty first-page footer/header instead of
+/// the default — visually leaving page 1 with no footer. The
+/// BoringCrypto reference registers first-page header/footer parts
+/// but does NOT set titlePg, so its first page falls back to the
+/// default footer. Match that behavior by deleting the flag.
+fn strip_unwanted_section_flags(xml: &str, name: &str) -> String {
+    if name != "word/document.xml" {
+        return xml.to_string();
+    }
+    xml.replace("<w:titlePg />", "").replace("<w:titlePg/>", "")
 }
 
 /// Inject the Word-managed housekeeping bookmarks (`_GoBack`,
