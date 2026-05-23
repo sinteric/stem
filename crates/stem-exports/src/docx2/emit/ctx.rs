@@ -31,6 +31,14 @@ pub struct EmbeddedImage {
     pub ext: String,
 }
 
+/// One external hyperlink. Internal (anchor) hyperlinks don't
+/// need a rel — they live in document.xml as `<w:hyperlink w:anchor="…">`.
+#[derive(Clone)]
+pub struct ExternalLink {
+    pub rid: String,
+    pub url: String,
+}
+
 #[derive(Default)]
 pub struct EmitCtx {
     /// Directory used to resolve relative `image[src:...]` paths.
@@ -52,6 +60,28 @@ pub struct EmitCtx {
     /// so the document reads correctly before the user presses F9.
     pub table_caption_seq: u32,
     pub figure_caption_seq: u32,
+    /// External hyperlinks. Each needs an Hyperlink relationship
+    /// in `document.xml.rels` with `TargetMode="External"`.
+    pub hyperlinks: Vec<ExternalLink>,
+    /// Monotonic bookmark id counter. Word requires unique ids
+    /// per `<w:bookmarkStart>` and the matching `<w:bookmarkEnd>`.
+    next_bookmark_id: u32,
+    /// Headings emitted in document order — used by the TOC
+    /// builder (task 12) to populate PAGEREF entries.
+    pub heading_anchors: Vec<HeadingAnchor>,
+}
+
+/// Bookmark + display text for one heading. Captured during body
+/// emission so the TOC field's pre-populated entries can name the
+/// same anchor.
+#[derive(Clone)]
+pub struct HeadingAnchor {
+    /// `_Toc<n>` — anchor name a `PAGEREF` can resolve.
+    pub bookmark: String,
+    /// Heading level 1..6.
+    pub level: u32,
+    /// Visible text after inline elements are flattened.
+    pub text: String,
 }
 
 impl EmitCtx {
@@ -67,7 +97,31 @@ impl EmitCtx {
             next_drawing_id: 1,
             table_caption_seq: 0,
             figure_caption_seq: 0,
+            hyperlinks: Vec::new(),
+            next_bookmark_id: 1,
+            heading_anchors: Vec::new(),
         }
+    }
+
+    /// Register an external hyperlink target; returns its rId.
+    /// De-duplicates by URL so a document linking the same URL
+    /// multiple times only consumes one rel.
+    pub fn add_external_link(&mut self, url: &str) -> String {
+        if let Some(existing) = self.hyperlinks.iter().find(|h| h.url == url) {
+            return existing.rid.clone();
+        }
+        let rid = self.alloc_rid();
+        self.hyperlinks.push(ExternalLink {
+            rid: rid.clone(),
+            url: url.to_string(),
+        });
+        rid
+    }
+
+    pub fn alloc_bookmark_id(&mut self) -> u32 {
+        let id = self.next_bookmark_id;
+        self.next_bookmark_id = id + 1;
+        id
     }
 
     /// Allocate the next `rIdN` string.

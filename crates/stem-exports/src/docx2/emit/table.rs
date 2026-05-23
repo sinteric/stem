@@ -83,6 +83,7 @@ pub fn render_table(b: &Block, ctx: &mut EmitCtx, x: &mut XmlBuf) {
                 data_row_idx,
                 col_w_dxa,
                 &mut pending,
+                ctx,
                 x,
             );
             if !is_header {
@@ -217,6 +218,7 @@ fn render_tr(
     data_row_idx: usize,
     col_w_dxa: u32,
     pending: &mut Vec<RowspanCarry>,
+    ctx: &mut EmitCtx,
     x: &mut XmlBuf,
 ) {
     x.elem("w:tr", &[], |x| {
@@ -275,6 +277,7 @@ fn render_tr(
                 rowspan,
                 col_w_dxa,
                 force_bg,
+                ctx,
                 x,
             );
 
@@ -331,6 +334,7 @@ fn render_tc(
     rowspan: u32,
     col_w_dxa: u32,
     force_bg: Option<String>,
+    ctx: &mut EmitCtx,
     x: &mut XmlBuf,
 ) {
     let w = (col_w_dxa * colspan as u32).to_string();
@@ -362,11 +366,11 @@ fn render_tc(
 
         // Cell content — at least one paragraph required, even if
         // the cell is "empty".
-        emit_cell_paragraphs(cell, is_header, x);
+        emit_cell_paragraphs(cell, is_header, ctx, x);
     });
 }
 
-fn emit_cell_paragraphs(cell: &Block, is_header: bool, x: &mut XmlBuf) {
+fn emit_cell_paragraphs(cell: &Block, is_header: bool, ctx: &mut EmitCtx, x: &mut XmlBuf) {
     let cell_align = cell.prop_str("align").and_then(map_jc);
     let base_rpr = if is_header {
         super::run::RPr {
@@ -381,12 +385,12 @@ fn emit_cell_paragraphs(cell: &Block, is_header: bool, x: &mut XmlBuf) {
     match &cell.body {
         Body::None => {}
         Body::Text(_) => {
-            emit_cell_paragraph(cell, cell_align, &base_rpr, x);
+            emit_cell_paragraph(cell, cell_align, &base_rpr, ctx, x);
             emitted += 1;
         }
         Body::Children(children) => {
             for child in children {
-                emit_cell_paragraph(child, cell_align, &base_rpr, x);
+                emit_cell_paragraph(child, cell_align, &base_rpr, ctx, x);
                 emitted += 1;
             }
         }
@@ -397,7 +401,13 @@ fn emit_cell_paragraphs(cell: &Block, is_header: bool, x: &mut XmlBuf) {
     }
 }
 
-fn emit_cell_paragraph(b: &Block, cell_align: Option<&'static str>, base: &super::run::RPr, x: &mut XmlBuf) {
+fn emit_cell_paragraph(
+    b: &Block,
+    cell_align: Option<&'static str>,
+    base: &super::run::RPr,
+    ctx: &mut EmitCtx,
+    x: &mut XmlBuf,
+) {
     x.elem("w:p", &[], |x| {
         let child_align = b.prop_str("align").and_then(map_jc);
         let jc = child_align.or(cell_align);
@@ -410,7 +420,7 @@ fn emit_cell_paragraph(b: &Block, cell_align: Option<&'static str>, base: &super
         }
         // Reuse the run dispatcher with the inherited rPr (so
         // header cells get bold runs).
-        run::render_body_with(b, x, base);
+        run::render_body_with(b, ctx, x, base);
     });
 }
 

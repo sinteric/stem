@@ -122,6 +122,13 @@ fn pack(document_body_xml: String, ctx: &EmitCtx) -> Result<Vec<u8>, DocxV2Error
             .to_string();
         doc_rels.push(rels::Rel::new(&img.rid, rels::kind::IMAGE, target));
     }
+    for link in &ctx.hyperlinks {
+        doc_rels.push(rels::Rel::external(
+            &link.rid,
+            rels::kind::HYPERLINK,
+            &link.url,
+        ));
+    }
     let doc_rels_xml = rels::build(&doc_rels);
 
     let mut pkg = Package::new();

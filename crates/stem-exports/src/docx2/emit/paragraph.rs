@@ -10,22 +10,22 @@ use stem_core::ast::{Block, Body};
 
 use super::super::parts::numbering::NUM_ID_HEADING;
 use super::super::xml::XmlBuf;
-use super::ctx::EmitCtx;
-use super::{drawing, run, table};
+use super::ctx::{EmitCtx, HeadingAnchor};
+use super::{drawing, hyperlink, run, table};
 
 /// Emit OOXML for one top-level block into `x`. Recurses into
 /// container blocks (`section`, `header`, `footer`).
 pub fn render_block(b: &Block, ctx: &mut EmitCtx, x: &mut XmlBuf) {
     match b.name.as_str() {
-        "title" => render_title(b, x),
-        "h1" => render_heading(b, 1, x),
-        "h2" => render_heading(b, 2, x),
-        "h3" => render_heading(b, 3, x),
-        "h4" => render_heading(b, 4, x),
-        "h5" => render_heading(b, 5, x),
-        "h6" => render_heading(b, 6, x),
-        "p" => render_paragraph(b, x),
-        "blockquote" => render_blockquote(b, x),
+        "title" => render_title(b, ctx, x),
+        "h1" => render_heading(b, 1, ctx, x),
+        "h2" => render_heading(b, 2, ctx, x),
+        "h3" => render_heading(b, 3, ctx, x),
+        "h4" => render_heading(b, 4, ctx, x),
+        "h5" => render_heading(b, 5, ctx, x),
+        "h6" => render_heading(b, 6, ctx, x),
+        "p" => render_paragraph(b, ctx, x),
+        "blockquote" => render_blockquote(b, ctx, x),
         "pagebreak" => render_pagebreak(x),
         "table" => table::render_table(b, ctx, x),
         "image" => drawing::render_image(b, ctx, x),
@@ -38,7 +38,7 @@ pub fn render_block(b: &Block, ctx: &mut EmitCtx, x: &mut XmlBuf) {
         // carrying the block's text. Keeps the output structurally
         // complete while later tasks (7-14) take over each block
         // type one by one.
-        _ => render_fallback_paragraph(b, x),
+        _ => render_fallback_paragraph(b, ctx, x),
     }
 }
 
@@ -51,7 +51,7 @@ fn render_children(b: &Block, ctx: &mut EmitCtx, x: &mut XmlBuf) {
     }
 }
 
-fn render_title(b: &Block, x: &mut XmlBuf) {
+fn render_title(b: &Block, ctx: &mut EmitCtx, x: &mut XmlBuf) {
     let align = b.prop_str("align").unwrap_or("center");
     x.elem("w:p", &[], |x| {
         x.elem("w:pPr", &[], |x| {
@@ -69,13 +69,26 @@ fn render_title(b: &Block, x: &mut XmlBuf) {
             );
             x.empty("w:jc", &[("w:val", normalize_jc(align))]);
         });
-        run::render_body(b, x);
+        run::render_body(b, ctx, x);
     });
 }
 
-fn render_heading(b: &Block, level: u32, x: &mut XmlBuf) {
+fn render_heading(b: &Block, level: u32, ctx: &mut EmitCtx, x: &mut XmlBuf) {
     let style = format!("Heading{level}");
     let numbered = b.prop_str("numbered") == Some("true");
+    // Register a heading anchor *before* emitting so task 12's
+    // TOC can resolve PAGEREF targets in document order. Flatten
+    // the heading text for the TOC's pre-populated label.
+    let anchor_idx = ctx.heading_anchors.len() + 1;
+    let bookmark = format!("_Toc{anchor_idx}");
+    let visible = hyperlink::flatten_link_text(b);
+    ctx.heading_anchors.push(HeadingAnchor {
+        bookmark: bookmark.clone(),
+        level,
+        text: visible,
+    });
+    let bm_id = ctx.alloc_bookmark_id();
+    let bm_id_s = bm_id.to_string();
     x.elem("w:p", &[], |x| {
         x.elem("w:pPr", &[], |x| {
             x.empty("w:pStyle", &[("w:val", &style)]);
@@ -88,22 +101,27 @@ fn render_heading(b: &Block, level: u32, x: &mut XmlBuf) {
                 });
             }
         });
-        run::render_body(b, x);
+        x.empty(
+            "w:bookmarkStart",
+            &[("w:id", &bm_id_s), ("w:name", &bookmark)],
+        );
+        run::render_body(b, ctx, x);
+        x.empty("w:bookmarkEnd", &[("w:id", &bm_id_s)]);
     });
 }
 
-fn render_paragraph(b: &Block, x: &mut XmlBuf) {
+fn render_paragraph(b: &Block, ctx: &mut EmitCtx, x: &mut XmlBuf) {
     x.elem("w:p", &[], |x| {
-        run::render_body(b, x);
+        run::render_body(b, ctx, x);
     });
 }
 
-fn render_blockquote(b: &Block, x: &mut XmlBuf) {
+fn render_blockquote(b: &Block, ctx: &mut EmitCtx, x: &mut XmlBuf) {
     x.elem("w:p", &[], |x| {
         x.elem("w:pPr", &[], |x| {
             x.empty("w:ind", &[("w:left", "720")]);
         });
-        run::render_body(b, x);
+        run::render_body(b, ctx, x);
     });
 }
 
@@ -116,9 +134,9 @@ fn render_pagebreak(x: &mut XmlBuf) {
 /// Fallback for block names task 6 doesn't yet specialize: emit a
 /// plain paragraph carrying the flattened text so the document
 /// keeps the right paragraph count and reading flow.
-fn render_fallback_paragraph(b: &Block, x: &mut XmlBuf) {
+fn render_fallback_paragraph(b: &Block, ctx: &mut EmitCtx, x: &mut XmlBuf) {
     x.elem("w:p", &[], |x| {
-        run::render_body(b, x);
+        run::render_body(b, ctx, x);
     });
 }
 

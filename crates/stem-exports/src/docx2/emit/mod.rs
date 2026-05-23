@@ -15,6 +15,7 @@
 pub mod ctx;
 pub mod drawing;
 pub mod field;
+pub mod hyperlink;
 pub mod paragraph;
 pub mod run;
 pub mod table;

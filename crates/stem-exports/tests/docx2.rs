@@ -407,6 +407,56 @@ fn boringcrypto_renders_all_tables() {
 }
 
 #[test]
+fn external_link_lands_in_doc_rels_and_w_hyperlink_uses_rid() {
+    let bytes = export_stem(
+        r#"p(visit @link[to:"https://example.org/foo"](this site) for details)"#,
+    );
+    let doc_rels = read_entry(&bytes, "word/_rels/document.xml.rels");
+    assert!(
+        doc_rels.contains(r#"Target="https://example.org/foo""#),
+        "missing external target: {doc_rels}"
+    );
+    assert!(doc_rels.contains(r#"TargetMode="External""#));
+    assert!(doc_rels.contains("relationships/hyperlink"));
+
+    let doc = read_entry(&bytes, "word/document.xml");
+    assert!(doc.contains("<w:hyperlink "));
+    assert!(doc.contains(r#"<w:rStyle w:val="Hyperlink"/>"#));
+    assert!(doc.contains("this site"));
+}
+
+#[test]
+fn anchor_link_does_not_create_a_rel() {
+    let bytes = export_stem(r#"p(see @link[to:"ref://_Toc1"](Section 1))"#);
+    let doc_rels = read_entry(&bytes, "word/_rels/document.xml.rels");
+    assert!(
+        !doc_rels.contains("TargetMode"),
+        "anchor link should not create a rel: {doc_rels}"
+    );
+    let doc = read_entry(&bytes, "word/document.xml");
+    assert!(doc.contains(r#"<w:hyperlink w:anchor="_Toc1""#));
+}
+
+#[test]
+fn headings_emit_toc_bookmarks_in_document_order() {
+    let bytes = export_stem(
+        r#"h1(Alpha)
+h2(Beta)
+h1(Gamma)"#,
+    );
+    let doc = read_entry(&bytes, "word/document.xml");
+    for n in 1..=3 {
+        let name = format!(r#"w:name="_Toc{n}""#);
+        assert!(doc.contains(&name), "missing bookmark name {name}");
+    }
+    // Bookmarks appear in document order.
+    let p1 = doc.find(r#"w:name="_Toc1""#).unwrap();
+    let p2 = doc.find(r#"w:name="_Toc2""#).unwrap();
+    let p3 = doc.find(r#"w:name="_Toc3""#).unwrap();
+    assert!(p1 < p2 && p2 < p3);
+}
+
+#[test]
 fn page_and_numpages_inlines_emit_fields() {
     let bytes = export_stem(r#"p(Page @page-number() of @total-pages())"#);
     let doc = read_entry(&bytes, "word/document.xml");

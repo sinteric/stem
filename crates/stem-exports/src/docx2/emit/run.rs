@@ -28,7 +28,8 @@
 use stem_core::ast::{Block, Body, TextPiece};
 
 use super::super::xml::XmlBuf;
-use super::field;
+use super::ctx::EmitCtx;
+use super::{field, hyperlink};
 
 /// Run properties. `Option` fields layer over inherited values
 /// from a parent inline; `bool` fields turn a property on
@@ -154,50 +155,47 @@ impl RPr {
 }
 
 /// Append every run that belongs to `b`'s body. Inline elements
-/// stack their rPr on top of `base`.
-pub fn render_body(b: &Block, x: &mut XmlBuf) {
-    render_body_with(b, x, &RPr::default());
+/// stack their rPr on top of `base`. The mutable `ctx` lets
+/// inline-emit hand-offs (hyperlinks, footnotes, ...) register
+/// the rels/parts they need.
+pub fn render_body(b: &Block, ctx: &mut EmitCtx, x: &mut XmlBuf) {
+    render_body_with(b, ctx, x, &RPr::default());
 }
 
 /// Same as [`render_body`] but starts from the supplied base rPr —
 /// used when a paragraph itself imposes formatting on its content
 /// (e.g. blockquote's italic in some style sets).
-pub fn render_body_with(b: &Block, x: &mut XmlBuf, base: &RPr) {
+pub fn render_body_with(b: &Block, ctx: &mut EmitCtx, x: &mut XmlBuf, base: &RPr) {
     if let Body::Text(pieces) = &b.body {
         for piece in pieces {
-            render_piece(piece, x, base);
+            render_piece(piece, ctx, x, base);
         }
     }
 }
 
-fn render_piece(piece: &TextPiece, x: &mut XmlBuf, parent: &RPr) {
+fn render_piece(piece: &TextPiece, ctx: &mut EmitCtx, x: &mut XmlBuf, parent: &RPr) {
     match piece {
         TextPiece::Literal { text, .. } => {
             if !text.is_empty() {
                 emit_run(text, parent, x);
             }
         }
-        TextPiece::Inline(inline) => render_inline(inline, x, parent),
+        TextPiece::Inline(inline) => render_inline(inline, ctx, x, parent),
     }
 }
 
-fn render_inline(inline: &Block, x: &mut XmlBuf, parent: &RPr) {
+fn render_inline(inline: &Block, ctx: &mut EmitCtx, x: &mut XmlBuf, parent: &RPr) {
     match inline.name.as_str() {
         // Specialized rPr extraction.
         "text" => {
             let layered = parent.merged(&rpr_from_text(inline));
-            render_inner(inline, x, &layered);
+            render_inner(inline, ctx, x, &layered);
         }
         "code" => {
             let layered = parent.merged(&rpr_code());
-            render_inner(inline, x, &layered);
+            render_inner(inline, ctx, x, &layered);
         }
-        // Deferred to task 11 — render as a styled run carrying the
-        // visible text so the document still reads right.
-        "link" => {
-            let layered = parent.merged(&rpr_hyperlink());
-            render_inner(inline, x, &layered);
-        }
+        "link" => hyperlink::render_link(inline, ctx, parent, x),
         // Deferred. `@footnote` runs become invisible markers
         // until task 14 wires the footnotes part; the body text
         // goes into the footnote, not the paragraph, so we drop
@@ -208,24 +206,24 @@ fn render_inline(inline: &Block, x: &mut XmlBuf, parent: &RPr) {
         // Other inline elements — emit their text recursively
         // with no extra styling. Future tasks specialize as
         // needed.
-        _ => render_inner(inline, x, parent),
+        _ => render_inner(inline, ctx, x, parent),
     }
 }
 
 /// Recurse into an inline's body so nested inlines keep stacking.
-fn render_inner(inline: &Block, x: &mut XmlBuf, current: &RPr) {
+fn render_inner(inline: &Block, ctx: &mut EmitCtx, x: &mut XmlBuf, current: &RPr) {
     match &inline.body {
         Body::None => {}
         Body::Text(pieces) => {
             for piece in pieces {
-                render_piece(piece, x, current);
+                render_piece(piece, ctx, x, current);
             }
         }
         Body::Children(blocks) => {
             // Inline elements rarely have children-body, but if
             // they do, walk their text via the same dispatch.
             for child in blocks {
-                render_body_with(child, x, current);
+                render_body_with(child, ctx, x, current);
             }
         }
     }
@@ -324,8 +322,9 @@ mod tests {
 
     fn render_runs(src: &str) -> String {
         let b = first_block(src);
+        let mut ctx = EmitCtx::new(None, 1);
         let mut x = XmlBuf::new();
-        render_body(&b, &mut x);
+        render_body(&b, &mut ctx, &mut x);
         x.finish()
     }
 
@@ -403,10 +402,10 @@ mod tests {
     }
 
     #[test]
-    fn link_inner_runs_carry_hyperlink_style() {
+    fn link_emits_w_hyperlink_with_hyperlink_style() {
         let s = render_runs(r#"p(visit @link[to:"https://x"](this site) please)"#);
+        assert!(s.contains("<w:hyperlink "));
         assert!(s.contains(r#"<w:rStyle w:val="Hyperlink"/>"#));
-        // Visible text "this site" is preserved.
         assert!(s.contains("this site"));
     }
 
