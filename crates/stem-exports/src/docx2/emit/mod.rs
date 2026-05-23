@@ -14,3 +14,4 @@
 
 pub mod paragraph;
 pub mod run;
+pub mod table;

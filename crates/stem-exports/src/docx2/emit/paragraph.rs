@@ -10,7 +10,7 @@ use stem_core::ast::{Block, Body};
 
 use super::super::parts::numbering::NUM_ID_HEADING;
 use super::super::xml::XmlBuf;
-use super::run;
+use super::{run, table};
 
 /// Emit OOXML for one top-level block into `x`. Recurses into
 /// container blocks (`section`, `header`, `footer`).
@@ -26,6 +26,7 @@ pub fn render_block(b: &Block, x: &mut XmlBuf) {
         "p" => render_paragraph(b, x),
         "blockquote" => render_blockquote(b, x),
         "pagebreak" => render_pagebreak(x),
+        "table" => table::render_table(b, x),
         // Container-shaped blocks — recurse into their child blocks
         // so nested paragraphs land at the body level. Task 6 does
         // not emit section/header/footer-specific wrappers; those

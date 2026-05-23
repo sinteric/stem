@@ -319,6 +319,30 @@ fn example_boringcrypto_renders_structurally() {
 }
 
 #[test]
+fn boringcrypto_renders_all_tables() {
+    let path = "../../examples/paper_boringcrypto.stem";
+    let Ok(src) = std::fs::read_to_string(path) else {
+        return;
+    };
+    let bytes = export_stem(&src);
+    let doc = read_entry(&bytes, "word/document.xml");
+
+    // Source has 15 `table[...]` blocks at the top level. Each must
+    // emit one `<w:tbl>`.
+    let tbl_count = doc.matches("<w:tbl>").count();
+    assert!(
+        tbl_count >= 15,
+        "expected ≥15 tables in boringcrypto, got {tbl_count}"
+    );
+    // Every table emits its grid columns.
+    assert!(doc.contains("<w:gridCol "));
+    // Header rows mark themselves with `<w:tblHeader/>`.
+    assert!(doc.contains("<w:tblHeader/>"));
+    // Caption paragraphs immediately follow tables.
+    assert!(doc.contains(r#"<w:pStyle w:val="Caption"/>"#));
+}
+
+#[test]
 fn rich_text_pieces_become_separate_runs() {
     // Tight end-to-end check on rPr extraction: a single paragraph
     // with two inline overrides must produce three runs with the
