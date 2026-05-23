@@ -66,14 +66,23 @@ pub struct EmitCtx {
     /// Monotonic bookmark id counter. Word requires unique ids
     /// per `<w:bookmarkStart>` and the matching `<w:bookmarkEnd>`.
     next_bookmark_id: u32,
-    /// Headings emitted in document order — used by the TOC
-    /// builder (task 12) to populate PAGEREF entries.
+    /// Pre-collected heading anchors in document order — populated
+    /// by [`super::prepass::collect`] before the emission walk so
+    /// the TOC field can render with the full set of entries even
+    /// when it sits at the top of the document.
     pub heading_anchors: Vec<HeadingAnchor>,
+    /// Cursor into `heading_anchors`. Advanced once per emitted
+    /// heading paragraph; the bookmark name comes from
+    /// `heading_anchors[heading_cursor].bookmark`.
+    pub heading_cursor: usize,
+    /// Pre-collected caption anchors (tables + figures) in
+    /// document order. LoT/LoF emission walks this vector.
+    pub captions: Vec<CaptionAnchor>,
 }
 
-/// Bookmark + display text for one heading. Captured during body
-/// emission so the TOC field's pre-populated entries can name the
-/// same anchor.
+/// Bookmark + display text for one heading. Populated by the
+/// prepass; consumed by heading emission and the TOC field
+/// builder.
 #[derive(Clone)]
 pub struct HeadingAnchor {
     /// `_Toc<n>` — anchor name a `PAGEREF` can resolve.
@@ -82,6 +91,23 @@ pub struct HeadingAnchor {
     pub level: u32,
     /// Visible text after inline elements are flattened.
     pub text: String,
+}
+
+/// Bookmark + display text for one caption (table or figure).
+/// Drives LoT/LoF entries and PAGEREF lookup.
+#[derive(Clone)]
+pub struct CaptionAnchor {
+    pub kind: CaptionKind,
+    pub bookmark: String,
+    pub text: String,
+    /// 1-based sequence index within its kind.
+    pub seq: u32,
+}
+
+#[derive(Clone, Copy, PartialEq, Eq)]
+pub enum CaptionKind {
+    Table,
+    Figure,
 }
 
 impl EmitCtx {
@@ -100,6 +126,8 @@ impl EmitCtx {
             hyperlinks: Vec::new(),
             next_bookmark_id: 1,
             heading_anchors: Vec::new(),
+            heading_cursor: 0,
+            captions: Vec::new(),
         }
     }
 

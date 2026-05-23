@@ -430,10 +430,18 @@ fn emit_caption(b: &Block, ctx: &mut EmitCtx, x: &mut XmlBuf) {
     };
     ctx.table_caption_seq += 1;
     let seq_n = ctx.table_caption_seq;
+    // Anchor so LoT PAGEREF (task 12) resolves.
+    let bookmark = format!("_Toc_table_{seq_n}");
+    let bm_id = ctx.alloc_bookmark_id();
+    let bm_id_s = bm_id.to_string();
     x.elem("w:p", &[], |x| {
         x.elem("w:pPr", &[], |x| {
             x.empty("w:pStyle", &[("w:val", "Caption")]);
         });
+        x.empty(
+            "w:bookmarkStart",
+            &[("w:id", &bm_id_s), ("w:name", &bookmark)],
+        );
         // "Table " label run.
         x.elem("w:r", &[], |x| {
             x.elem_text("w:t", &[], "Table ", true);
@@ -446,6 +454,7 @@ fn emit_caption(b: &Block, ctx: &mut EmitCtx, x: &mut XmlBuf) {
         x.elem("w:r", &[], |x| {
             x.elem_text("w:t", &[], &format!(". {text}"), true);
         });
+        x.empty("w:bookmarkEnd", &[("w:id", &bm_id_s)]);
     });
 }
 

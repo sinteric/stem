@@ -17,5 +17,7 @@ pub mod drawing;
 pub mod field;
 pub mod hyperlink;
 pub mod paragraph;
+pub mod prepass;
 pub mod run;
 pub mod table;
+pub mod toc;

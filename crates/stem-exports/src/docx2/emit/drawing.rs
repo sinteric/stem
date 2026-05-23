@@ -76,7 +76,7 @@ pub fn render_image(b: &Block, ctx: &mut EmitCtx, x: &mut XmlBuf) {
         });
     });
 
-    emit_caption(b, x);
+    emit_caption(b, ctx, x);
 }
 
 fn placeholder(x: &mut XmlBuf, reason: &str) {
@@ -292,17 +292,31 @@ fn emit_sp_pr(x: &mut XmlBuf, w_emu: u32, h_emu: u32) {
     });
 }
 
-fn emit_caption(b: &Block, x: &mut XmlBuf) {
+fn emit_caption(b: &Block, ctx: &mut EmitCtx, x: &mut XmlBuf) {
     let Some(text) = b.prop_str("caption") else {
         return;
     };
+    ctx.figure_caption_seq += 1;
+    let seq_n = ctx.figure_caption_seq;
+    let bookmark = format!("_Toc_figure_{seq_n}");
+    let bm_id = ctx.alloc_bookmark_id();
+    let bm_id_s = bm_id.to_string();
     x.elem("w:p", &[], |x| {
         x.elem("w:pPr", &[], |x| {
             x.empty("w:pStyle", &[("w:val", "Caption")]);
         });
+        x.empty(
+            "w:bookmarkStart",
+            &[("w:id", &bm_id_s), ("w:name", &bookmark)],
+        );
         x.elem("w:r", &[], |x| {
-            x.elem_text("w:t", &[], text, true);
+            x.elem_text("w:t", &[], "Figure ", true);
         });
+        super::field::render_seq("Figure", seq_n, x);
+        x.elem("w:r", &[], |x| {
+            x.elem_text("w:t", &[], &format!(". {text}"), true);
+        });
+        x.empty("w:bookmarkEnd", &[("w:id", &bm_id_s)]);
     });
 }
 

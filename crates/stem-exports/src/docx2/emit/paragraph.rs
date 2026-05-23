@@ -10,8 +10,8 @@ use stem_core::ast::{Block, Body};
 
 use super::super::parts::numbering::NUM_ID_HEADING;
 use super::super::xml::XmlBuf;
-use super::ctx::{EmitCtx, HeadingAnchor};
-use super::{drawing, hyperlink, run, table};
+use super::ctx::EmitCtx;
+use super::{drawing, run, table, toc};
 
 /// Emit OOXML for one top-level block into `x`. Recurses into
 /// container blocks (`section`, `header`, `footer`).
@@ -33,7 +33,11 @@ pub fn render_block(b: &Block, ctx: &mut EmitCtx, x: &mut XmlBuf) {
         // so nested paragraphs land at the body level. Task 6 does
         // not emit section/header/footer-specific wrappers; those
         // arrive in tasks 11+ (sections) and 13 (header/footer).
-        "section" => render_children(b, ctx, x),
+        "section" => {
+            if !toc::try_render_toc_section(b, ctx, x) {
+                render_children(b, ctx, x);
+            }
+        }
         // Anything else not yet handled: emit as a plain paragraph
         // carrying the block's text. Keeps the output structurally
         // complete while later tasks (7-14) take over each block
@@ -76,17 +80,15 @@ fn render_title(b: &Block, ctx: &mut EmitCtx, x: &mut XmlBuf) {
 fn render_heading(b: &Block, level: u32, ctx: &mut EmitCtx, x: &mut XmlBuf) {
     let style = format!("Heading{level}");
     let numbered = b.prop_str("numbered") == Some("true");
-    // Register a heading anchor *before* emitting so task 12's
-    // TOC can resolve PAGEREF targets in document order. Flatten
-    // the heading text for the TOC's pre-populated label.
-    let anchor_idx = ctx.heading_anchors.len() + 1;
-    let bookmark = format!("_Toc{anchor_idx}");
-    let visible = hyperlink::flatten_link_text(b);
-    ctx.heading_anchors.push(HeadingAnchor {
-        bookmark: bookmark.clone(),
-        level,
-        text: visible,
-    });
+    // Use the bookmark name from the prepass-populated registry;
+    // advance the cursor so each subsequent heading consumes the
+    // next anchor.
+    let bookmark = ctx
+        .heading_anchors
+        .get(ctx.heading_cursor)
+        .map(|a| a.bookmark.clone())
+        .unwrap_or_else(|| format!("_Toc{}", ctx.heading_cursor + 1));
+    ctx.heading_cursor += 1;
     let bm_id = ctx.alloc_bookmark_id();
     let bm_id_s = bm_id.to_string();
     x.elem("w:p", &[], |x| {

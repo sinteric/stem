@@ -407,6 +407,49 @@ fn boringcrypto_renders_all_tables() {
 }
 
 #[test]
+fn toc_section_emits_field_with_prepopulated_heading_entries() {
+    let bytes = export_stem(
+        r#"section[id:toc]
+h1(Intro)
+h2(Why)
+h1(Done)"#,
+    );
+    let doc = read_entry(&bytes, "word/document.xml");
+    // TOC heading paragraph.
+    assert!(doc.contains(r#"<w:pStyle w:val="TOCHeading"/>"#));
+    assert!(doc.contains("Table of Contents"));
+    // TOC field present.
+    assert!(doc.contains(" TOC "));
+    // Three entries — one per heading.
+    let toc_hyperlinks = doc.matches(r#"<w:hyperlink w:anchor="_Toc"#).count();
+    assert!(toc_hyperlinks >= 3, "expected ≥3 TOC entries, got {toc_hyperlinks}");
+    // The heading bookmarks each entry refers to are present in
+    // the body.
+    for i in 1..=3 {
+        assert!(doc.contains(&format!(r#"w:name="_Toc{i}""#)));
+    }
+}
+
+#[test]
+fn list_of_tables_emits_table_caption_entries() {
+    let bytes = export_stem(
+        r#"section[id:list-of-tables]
+table[caption:"Alpha"]{ row{ cell(a) } }
+table[caption:"Beta"]{ row{ cell(b) } }"#,
+    );
+    let doc = read_entry(&bytes, "word/document.xml");
+    assert!(doc.contains("List of Tables"));
+    // Entries pre-formatted as "Table N. <text>".
+    assert!(doc.contains("Table 1. Alpha"));
+    assert!(doc.contains("Table 2. Beta"));
+    // Anchor hyperlinks to the matching caption bookmarks.
+    assert!(doc.contains(r#"<w:hyperlink w:anchor="_Toc_table_1""#));
+    assert!(doc.contains(r#"<w:hyperlink w:anchor="_Toc_table_2""#));
+    // Caption paragraphs are bookmarked.
+    assert!(doc.contains(r#"w:name="_Toc_table_1""#));
+}
+
+#[test]
 fn external_link_lands_in_doc_rels_and_w_hyperlink_uses_rid() {
     let bytes = export_stem(
         r#"p(visit @link[to:"https://example.org/foo"](this site) for details)"#,

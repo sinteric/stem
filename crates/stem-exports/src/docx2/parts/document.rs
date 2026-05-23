@@ -7,7 +7,7 @@
 use stem_core::ast::Document;
 
 use super::super::emit::ctx::EmitCtx;
-use super::super::emit::paragraph;
+use super::super::emit::{paragraph, prepass};
 use super::super::xml::{Ns, XmlBuf};
 
 const NS_W: &str = "http://schemas.openxmlformats.org/wordprocessingml/2006/main";
@@ -24,8 +24,11 @@ const NS_PIC: &str = "http://schemas.openxmlformats.org/drawingml/2006/picture";
 /// Document body for the cooked AST. Walks the AST with the
 /// shared [`EmitCtx`] so embedded images, hyperlinks, and the
 /// other side-state needed by `document.xml.rels` accumulate
-/// during emission.
+/// during emission. A prepass populates heading + caption
+/// anchors first so the TOC field can render with full entries
+/// even when it sits at the start of the document.
 pub fn body(doc: &Document, ctx: &mut EmitCtx) -> String {
+    prepass::collect(doc, ctx);
     let mut x = XmlBuf::new();
     x.xml_decl();
     x.elem_with_ns(
