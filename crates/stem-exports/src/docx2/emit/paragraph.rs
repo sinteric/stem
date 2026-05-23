@@ -351,7 +351,7 @@ fn parse_length_to_dxa(s: &str) -> Option<u32> {
     Some((pts * 20.0).round() as u32)
 }
 
-fn map_align(s: &str) -> Option<&'static str> {
+pub fn map_align(s: &str) -> Option<&'static str> {
     match s {
         "left" => Some("left"),
         "right" => Some("right"),

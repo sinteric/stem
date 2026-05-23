@@ -66,7 +66,9 @@ fn parse_levels(spec: Option<&str>) -> (u32, u32) {
 }
 
 fn render_toc(start: u32, end: u32, ctx: &mut EmitCtx, x: &mut XmlBuf) {
-    // Header paragraph.
+    // Header paragraph — centering comes from the TOCHeading style
+    // itself (see parts/styles.rs), not from a per-paragraph
+    // override. Matches the reference's "Contents Heading" style.
     x.elem("w:p", &[], |x| {
         x.elem("w:pPr", &[], |x| {
             x.empty("w:pStyle", &[("w:val", "TOCHeading")]);

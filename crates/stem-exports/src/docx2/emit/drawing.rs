@@ -63,18 +63,24 @@ pub fn render_image(b: &Block, ctx: &mut EmitCtx, x: &mut XmlBuf) {
     let alt = b.prop_str("alt").unwrap_or("Image");
 
     let float_mode = b.prop_str("float").unwrap_or("inline");
-    // Image paragraphs honor the same spacing primitives as `p`:
-    // `[before:..]`, `[after:..]`, `[line:..]` go through to the
-    // wrapping `<w:p>`'s pPr. Useful for clamping vertical space
-    // between the image and a following pagebreak (set `after:0pt`).
+    // Image paragraphs honor the same spacing + alignment
+    // primitives as `p`: `[before:..]`, `[after:..]`, `[line:..]`,
+    // `[align:..]` go through to the wrapping `<w:p>`'s pPr.
     let before = b.prop_str("before").and_then(super::paragraph::parse_dxa);
     let after = b.prop_str("after").and_then(super::paragraph::parse_dxa);
     let line = b.prop_str("line").and_then(super::paragraph::parse_line);
+    let align = b.prop_str("align").and_then(super::paragraph::map_align);
     let has_spacing = before.is_some() || after.is_some() || line.is_some();
+    let needs_p_pr = has_spacing || align.is_some();
     x.elem("w:p", &[], |x| {
-        if has_spacing {
+        if needs_p_pr {
             x.elem("w:pPr", &[], |x| {
-                super::paragraph::emit_spacing_pub(x, before, after, line);
+                if has_spacing {
+                    super::paragraph::emit_spacing_pub(x, before, after, line);
+                }
+                if let Some(j) = align {
+                    x.empty("w:jc", &[("w:val", j)]);
+                }
             });
         }
         x.elem("w:r", &[], |x| {

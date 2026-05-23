@@ -632,6 +632,10 @@ fn render_real_styles(x: &mut XmlBuf) {
                 after: Some(0),
                 line: None,
             }),
+            // Centered — matches the reference's "Contents Heading"
+            // style. Per-paragraph TOC emission inherits this jc
+            // rather than overriding it inline.
+            jc: Some("center"),
             // No outline_lvl on purpose — keeps TOCHeading out of
             // the TOC field's heading scan.
             ..Default::default()
