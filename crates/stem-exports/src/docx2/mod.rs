@@ -26,6 +26,8 @@ use thiserror::Error;
 // (styles, numbering, paragraphs, runs, tables, ...). Until they
 // land, suppress the dead-code warnings so the build stays clean.
 #[allow(dead_code)]
+mod emit;
+#[allow(dead_code)]
 mod package;
 #[allow(dead_code)]
 mod parts;
@@ -69,9 +71,7 @@ impl Exporter for DocxV2Exporter {
     type Output = Vec<u8>;
     type Error = DocxV2Error;
     fn export(&self, doc: &Document, _theme: &Theme) -> Result<Vec<u8>, DocxV2Error> {
-        // Task 1+2 scaffold: emit a minimal valid empty docx. The
-        // cooked AST is not consumed yet — body emission is task 6.
-        let _cooked = stem_parser::cook_document(doc);
-        parts::minimal_empty_doc()
+        let cooked = stem_parser::cook_document(doc);
+        parts::package_doc(&cooked)
     }
 }

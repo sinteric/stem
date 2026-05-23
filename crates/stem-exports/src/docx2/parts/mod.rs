@@ -1,6 +1,8 @@
 //! OOXML parts. Each submodule emits one part (or family of parts)
 //! as a `String` ready to be added to the ZIP package.
 
+use stem_core::ast::Document;
+
 use super::package::Package;
 use super::DocxV2Error;
 
@@ -45,15 +47,24 @@ mod content_type_names {
         "application/vnd.openxmlformats-officedocument.extended-properties+xml";
 }
 
-/// Minimal valid empty .docx with the full static-part set wired in:
-/// theme, settings, web settings, font table, docProps.
+/// Build the full `.docx` package for a cooked AST.
 ///
-/// Styles and numbering are not yet present (tasks 4-5); body
-/// content is a single empty paragraph (task 6 adds real emission).
-/// The document part's relationships reference everything that
-/// exists, so Word can open and re-save without complaining about
-/// dangling rels.
+/// All static parts (theme, settings, webSettings, fontTable,
+/// styles, numbering, docProps) are present; the document body is
+/// emitted from `doc.blocks` via the paragraph dispatcher in
+/// [`super::emit::paragraph`].
+pub fn package_doc(doc: &Document) -> Result<Vec<u8>, DocxV2Error> {
+    pack_with_body(document::body(doc))
+}
+
+/// Build a docx with a single empty paragraph. Kept so the
+/// scaffold tests (and the dev `STEM_DOCX2_DUMP` smoke artifact)
+/// have a deterministic minimum reference.
 pub fn minimal_empty_doc() -> Result<Vec<u8>, DocxV2Error> {
+    pack_with_body(document::minimal())
+}
+
+fn pack_with_body(document_body_xml: String) -> Result<Vec<u8>, DocxV2Error> {
     use content_type_names as ct;
 
     let content_types = content_types::builder()
@@ -83,7 +94,7 @@ pub fn minimal_empty_doc() -> Result<Vec<u8>, DocxV2Error> {
     pkg.add_text("[Content_Types].xml", content_types);
     pkg.add_text("_rels/.rels", root_rels);
     pkg.add_text("word/_rels/document.xml.rels", doc_rels);
-    pkg.add_text("word/document.xml", document::minimal());
+    pkg.add_text("word/document.xml", document_body_xml);
     pkg.add_text("word/styles.xml", styles::styles());
     pkg.add_text("word/numbering.xml", numbering::numbering());
     pkg.add_text("word/theme/theme1.xml", theme::theme1());

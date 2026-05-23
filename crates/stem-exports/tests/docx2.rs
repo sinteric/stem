@@ -226,3 +226,87 @@ fn empty_doc_numbering_part_has_three_lists() {
     let doc_rels = read_entry(&bytes, "word/_rels/document.xml.rels");
     assert!(doc_rels.contains(r#"Target="numbering.xml""#));
 }
+
+fn export_stem(src: &str) -> Vec<u8> {
+    let r = stem_parser::parse(src);
+    let errs: Vec<_> = r
+        .diagnostics
+        .iter()
+        .filter(|d| matches!(d.severity, stem_core::Severity::Error))
+        .collect();
+    assert!(errs.is_empty(), "parse errors: {:?}", errs);
+    DocxV2Exporter::new()
+        .export(&r.document, &Theme::default())
+        .expect("export")
+}
+
+#[test]
+fn dump_example_artifacts_when_env_set() {
+    // Helper for side-by-side verification in Word. Enable with
+    // `STEM_DOCX2_EXAMPLES_DIR=/tmp/docx2_out cargo test ...`.
+    let Ok(dir) = std::env::var("STEM_DOCX2_EXAMPLES_DIR") else {
+        return;
+    };
+    std::fs::create_dir_all(&dir).expect("mkdir");
+    for example in ["paper.stem", "paper_boringcrypto.stem", "roadmap.stem"] {
+        let path = format!("../../examples/{example}");
+        if let Ok(src) = std::fs::read_to_string(&path) {
+            let bytes = export_stem(&src);
+            let out_path = format!("{}/{}", dir, example.replace(".stem", ".docx"));
+            std::fs::write(&out_path, &bytes).expect("write");
+            eprintln!("wrote {out_path} ({} bytes)", bytes.len());
+        } else {
+            eprintln!("skipping {path}");
+        }
+    }
+}
+
+#[test]
+fn example_paper_renders_with_paragraph_body() {
+    let src = std::fs::read_to_string("../../examples/paper.stem").expect("read paper.stem");
+    let bytes = export_stem(&src);
+    let doc = read_entry(&bytes, "word/document.xml");
+
+    // The example uses Title, H1, H2 — every heading should land
+    // with the matching pStyle.
+    assert!(doc.contains(r#"<w:pStyle w:val="Heading1"/>"#));
+    assert!(doc.contains(r#"<w:pStyle w:val="Heading2"/>"#));
+
+    // Each `numbered:true` heading carries `<w:numPr>` linked to
+    // the heading numbering definition (numId 3).
+    assert!(doc.contains("<w:numPr>"));
+    assert!(doc.contains(r#"<w:numId w:val="3"/>"#));
+
+    // Document opens with sectPr at the end of the body.
+    assert!(doc.ends_with("</w:document>") || doc.ends_with("</w:document>\n"));
+    assert!(doc.contains("<w:sectPr>"));
+}
+
+#[test]
+fn example_boringcrypto_renders_structurally() {
+    let path = "../../examples/paper_boringcrypto.stem";
+    let Ok(src) = std::fs::read_to_string(path) else {
+        // The example file isn't always present in CI checkout
+        // contexts; skip the structural assertion if missing.
+        eprintln!("skipping: {path} not present");
+        return;
+    };
+    let bytes = export_stem(&src);
+    let doc = read_entry(&bytes, "word/document.xml");
+
+    // BoringCrypto has a `title` block on the cover, Heading1 +
+    // Heading2 throughout, and many `numbered:true` headings.
+    assert!(doc.contains(r#"<w:pStyle w:val="Title"/>"#));
+    assert!(doc.contains(r#"<w:pStyle w:val="Heading1"/>"#));
+    assert!(doc.contains(r#"<w:pStyle w:val="Heading2"/>"#));
+
+    // Paragraph count — task 6 emits one <w:p> per top-level
+    // block (with section blocks recursed into). The source has
+    // ~196 paragraph-like blocks; the rendered count should be in
+    // the same ballpark.
+    let p_count = doc.matches("<w:p>").count() + doc.matches("<w:p ").count() + doc.matches("<w:p/>").count();
+    assert!(
+        p_count > 100,
+        "expected >100 paragraphs from boringcrypto, got {p_count}"
+    );
+}
