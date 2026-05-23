@@ -407,6 +407,43 @@ fn boringcrypto_renders_all_tables() {
 }
 
 #[test]
+fn footnote_inline_lands_in_footnotes_part_and_body_ref() {
+    let bytes =
+        export_stem(r#"p(See@footnote(the spec) for details and@footnote(other) too)"#);
+
+    let doc = read_entry(&bytes, "word/document.xml");
+    // Body has two footnoteReference runs with sequential ids.
+    assert!(doc.contains(r#"<w:footnoteReference w:id="1"/>"#));
+    assert!(doc.contains(r#"<w:footnoteReference w:id="2"/>"#));
+    assert!(doc.contains(r#"<w:rStyle w:val="FootnoteReference"/>"#));
+
+    // Footnotes part exists with both entries + separator
+    // boilerplate.
+    let fn_xml = read_entry(&bytes, "word/footnotes.xml");
+    assert!(fn_xml.contains(r#"<w:footnote w:type="separator" w:id="-1">"#));
+    assert!(fn_xml.contains(r#"<w:footnote w:id="1">"#));
+    assert!(fn_xml.contains(r#"<w:footnote w:id="2">"#));
+    assert!(fn_xml.contains("the spec"));
+    assert!(fn_xml.contains("other"));
+
+    // Content_Types + document rels include it.
+    let ct = read_entry(&bytes, "[Content_Types].xml");
+    assert!(ct.contains("/word/footnotes.xml"));
+    let doc_rels = read_entry(&bytes, "word/_rels/document.xml.rels");
+    assert!(doc_rels.contains(r#"Target="footnotes.xml""#));
+    assert!(doc_rels.contains("relationships/footnotes"));
+}
+
+#[test]
+fn no_footnotes_means_no_footnotes_part() {
+    let bytes = export_stem(r#"p(plain paragraph)"#);
+    let ct = read_entry(&bytes, "[Content_Types].xml");
+    assert!(!ct.contains("/word/footnotes.xml"));
+    let doc_rels = read_entry(&bytes, "word/_rels/document.xml.rels");
+    assert!(!doc_rels.contains("footnotes.xml"));
+}
+
+#[test]
 fn header_and_footer_become_separate_parts() {
     let bytes = export_stem(
         r#"header{ p(My document) }

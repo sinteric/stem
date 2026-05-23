@@ -196,11 +196,14 @@ fn render_inline(inline: &Block, ctx: &mut EmitCtx, x: &mut XmlBuf, parent: &RPr
             render_inner(inline, ctx, x, &layered);
         }
         "link" => hyperlink::render_link(inline, ctx, parent, x),
-        // Deferred. `@footnote` runs become invisible markers
-        // until task 14 wires the footnotes part; the body text
-        // goes into the footnote, not the paragraph, so we drop
-        // it here.
-        "footnote" => {}
+        "footnote" => {
+            // Capture the body as the footnote content; emit a
+            // superscript footnote reference at the current run
+            // position.
+            let text = flatten_inline_text(inline);
+            let id = ctx.add_footnote(text);
+            emit_footnote_ref(id, x);
+        }
         "page-number" => field::render_page(x),
         "total-pages" => field::render_num_pages(x),
         // Other inline elements — emit their text recursively
@@ -300,6 +303,32 @@ fn emit_run(text: &str, rpr: &RPr, x: &mut XmlBuf) {
         rpr.render(x);
         x.elem_text("w:t", &[], text, true);
     });
+}
+
+/// Emit a `<w:footnoteReference w:id="N"/>` run with the
+/// FootnoteReference character style. Lands at the cursor so the
+/// surrounding text reads "see prior text¹".
+fn emit_footnote_ref(id: u32, x: &mut XmlBuf) {
+    let id_s = id.to_string();
+    x.elem("w:r", &[], |x| {
+        x.elem("w:rPr", &[], |x| {
+            x.empty("w:rStyle", &[("w:val", "FootnoteReference")]);
+        });
+        x.empty("w:footnoteReference", &[("w:id", &id_s)]);
+    });
+}
+
+fn flatten_inline_text(b: &Block) -> String {
+    let mut out = String::new();
+    if let Body::Text(pieces) = &b.body {
+        for p in pieces {
+            match p {
+                TextPiece::Literal { text, .. } => out.push_str(text),
+                TextPiece::Inline(inner) => out.push_str(&flatten_inline_text(inner)),
+            }
+        }
+    }
+    out
 }
 
 /// Emit `<w:r><w:br w:type="page"/></w:r>`. Used by pagebreak.
@@ -410,14 +439,23 @@ mod tests {
     }
 
     #[test]
-    fn footnote_inline_emits_no_visible_run() {
-        // Task 7 drops footnote-marker emission entirely; task 14
-        // wires it up. The surrounding paragraph still emits its
-        // other text.
-        let s = render_runs(r#"p(see @footnote(foo) end)"#);
+    fn footnote_inline_emits_reference_run_and_captures_text() {
+        let b = first_block(r#"p(see @footnote(foo body) end)"#);
+        let mut ctx = EmitCtx::new(None, 1);
+        let mut x = XmlBuf::new();
+        render_body(&b, &mut ctx, &mut x);
+        let s = x.finish();
+        // Visible body keeps "see " and " end" — the marker
+        // doesn't contain the footnote text.
         assert!(s.contains("see "));
         assert!(s.contains(" end"));
-        assert!(!s.contains("foo"));
+        // <w:footnoteReference w:id="1"/> + FootnoteReference style.
+        assert!(s.contains(r#"<w:footnoteReference w:id="1"/>"#));
+        assert!(s.contains(r#"<w:rStyle w:val="FootnoteReference"/>"#));
+        // Captured footnote content is "foo body".
+        assert_eq!(ctx.footnotes.len(), 1);
+        assert_eq!(ctx.footnotes[0].id, 1);
+        assert_eq!(ctx.footnotes[0].text, "foo body");
     }
 
     #[test]

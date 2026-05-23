@@ -91,6 +91,29 @@ pub struct EmitCtx {
     /// in sectPr can name it.
     pub header_rids: Vec<String>,
     pub footer_rids: Vec<String>,
+    /// Footnote contents captured during body emission. Each
+    /// entry's `id` matches the `<w:footnoteReference w:id="…"/>`
+    /// emitted in the body; the packager renders them into
+    /// `word/footnotes.xml`.
+    pub footnotes: Vec<FootnoteEntry>,
+    /// Next footnote id. Word reserves -1 (separator) and 0
+    /// (continuation separator), so user notes start at 1.
+    next_footnote_id: u32,
+    /// rId for the footnotes part — `None` if no footnotes were
+    /// emitted, in which case the part isn't written at all.
+    pub footnotes_rid: Option<String>,
+}
+
+/// One footnote — the `id` is referenced by both the
+/// `<w:footnoteReference>` in the body and the matching
+/// `<w:footnote w:id="…">` block in the footnotes part. The
+/// `text` is the flattened content; rich runs are out of scope for
+/// task 14 (footnotes carrying inline-formatted runs need the
+/// same render_body machinery, deferred until needed).
+#[derive(Clone)]
+pub struct FootnoteEntry {
+    pub id: u32,
+    pub text: String,
 }
 
 /// Bookmark + display text for one heading. Populated by the
@@ -145,7 +168,19 @@ impl EmitCtx {
             footers: Vec::new(),
             header_rids: Vec::new(),
             footer_rids: Vec::new(),
+            footnotes: Vec::new(),
+            next_footnote_id: 1,
+            footnotes_rid: None,
         }
+    }
+
+    /// Register a footnote — returns the id to embed in
+    /// `<w:footnoteReference w:id="…"/>`.
+    pub fn add_footnote(&mut self, text: String) -> u32 {
+        let id = self.next_footnote_id;
+        self.next_footnote_id = id + 1;
+        self.footnotes.push(FootnoteEntry { id, text });
+        id
     }
 
     /// Register an external hyperlink target; returns its rId.

@@ -20,6 +20,7 @@ pub mod content_types;
 pub mod doc_props;
 pub mod document;
 pub mod font_table;
+pub mod footnotes;
 pub mod header_footer;
 pub mod numbering;
 pub mod rels;
@@ -83,6 +84,11 @@ pub fn package_doc(doc: &Document, image_base: Option<&Path>) -> Result<Vec<u8>,
     for blocks in &footers {
         footer_xmls.push(header_footer::footer(blocks, &mut ctx));
     }
+    // Reserve a footnotes part rId iff any footnote was registered.
+    if !ctx.footnotes.is_empty() {
+        let rid = ctx.alloc_rid();
+        ctx.footnotes_rid = Some(rid);
+    }
     pack(body_xml, &ctx, &header_xmls, &footer_xmls)
 }
 
@@ -119,6 +125,9 @@ fn pack(
     for (i, _) in footer_xmls.iter().enumerate() {
         ct_builder = ct_builder
             .override_part(&format!("/word/footer{}.xml", i + 1), ct::FOOTER);
+    }
+    if !ctx.footnotes.is_empty() {
+        ct_builder = ct_builder.override_part("/word/footnotes.xml", ct::FOOTNOTES);
     }
     // Register a Default content-type per image extension actually
     // used so Word knows how to decode the bytes.
@@ -172,6 +181,9 @@ fn pack(
             format!("footer{}.xml", i + 1),
         ));
     }
+    if let Some(rid) = &ctx.footnotes_rid {
+        doc_rels.push(rels::Rel::new(rid, rels::kind::FOOTNOTES, "footnotes.xml"));
+    }
     let doc_rels_xml = rels::build(&doc_rels);
 
     let mut pkg = Package::new();
@@ -195,6 +207,9 @@ fn pack(
     }
     for (i, xml) in footer_xmls.iter().enumerate() {
         pkg.add_text(format!("word/footer{}.xml", i + 1), xml.clone());
+    }
+    if !ctx.footnotes.is_empty() {
+        pkg.add_text("word/footnotes.xml", footnotes::footnotes(&ctx.footnotes));
     }
     pkg.finish()
 }
