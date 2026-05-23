@@ -162,10 +162,13 @@ fn render_heading(b: &Block, level: u32, ctx: &mut EmitCtx, x: &mut XmlBuf) {
 fn render_paragraph(b: &Block, ctx: &mut EmitCtx, x: &mut XmlBuf) {
     x.elem("w:p", &[], |x| {
         let visually_empty = is_visually_empty(b);
+        let tight = b.prop_str("tight") == Some("true");
         let border_top = b.prop_str("border-top") == Some("true");
         let tabs = b.prop_str("tabs");
         let align = b.prop_str("align").and_then(map_align);
-        let needs_p_pr = visually_empty || border_top || tabs.is_some() || align.is_some();
+        let collapse_spacing = visually_empty || tight;
+        let needs_p_pr =
+            collapse_spacing || border_top || tabs.is_some() || align.is_some();
         if needs_p_pr {
             x.elem("w:pPr", &[], |x| {
                 // pBdr → tabs → spacing → jc per schema order.
@@ -185,13 +188,12 @@ fn render_paragraph(b: &Block, ctx: &mut EmitCtx, x: &mut XmlBuf) {
                 if let Some(spec) = tabs {
                     render_tabs(x, spec);
                 }
-                if visually_empty {
-                    // Empty `p()` blocks are spacers — collapse the
-                    // 8pt-after / 1.08x-line default to zero so a
-                    // stack of them stays tight. The reference's
-                    // cover uses 25+ empty paragraphs to position
-                    // the logo; without this override they'd push
-                    // content off the page.
+                if collapse_spacing {
+                    // Empty `p()` spacers and explicitly-tight
+                    // paragraphs collapse the 8pt-after / 1.08x
+                    // default to zero after / single line. Used by
+                    // the cover's stack of empty paragraphs and by
+                    // header/footer lines that need tight stacking.
                     x.empty(
                         "w:spacing",
                         &[
@@ -405,6 +407,15 @@ mod tests {
         let s = render(r#"blockquote(quoted text)"#);
         assert!(s.contains(r#"<w:ind w:left="720"/>"#));
         assert!(s.contains("quoted text"));
+    }
+
+    #[test]
+    fn paragraph_with_tight_collapses_spacing() {
+        let s = render(r#"p[tight:true](hello)"#);
+        assert!(
+            s.contains(r#"<w:spacing w:after="0" w:line="240" w:lineRule="auto"/>"#),
+            "expected tight spacing override: {s}"
+        );
     }
 
     #[test]
