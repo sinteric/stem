@@ -255,14 +255,156 @@ the feature is off.
 
 ### docx (export: ✅ MVP, import: stub)
 
+Two implementations:
+
+- **`docx2`** (cargo feature `docx2`) — current direct-OOXML emitter.
+  Hand-emits each part as a string and packages via the `zip` crate.
+  Lives at `crates/stem-exports/src/docx2/`. This is the path we're
+  migrating to.
+- **`docx`** (cargo feature `docx`) — legacy path via the `docx-rs`
+  crate, kept until task 16 of the docx2 migration plan retires it.
+
+#### docx2 — direct OOXML emission
+
+Layout:
+
+```
+crates/stem-exports/src/docx2/
+├── mod.rs              # DocxV2Exporter + Exporter trait impl
+├── xml.rs              # Small string-based XML builder
+├── package.rs          # ZIP packaging (uses existing `zip` dep)
+├── parts/              # One module per OOXML part
+│   ├── content_types.rs
+│   ├── document.rs     # word/document.xml body
+│   ├── doc_props.rs    # docProps/{app,core}.xml
+│   ├── endnotes.rs
+│   ├── font_table.rs
+│   ├── footnotes.rs
+│   ├── header_footer.rs
+│   ├── numbering.rs    # bullet / ordered / heading multilevel
+│   ├── rels.rs         # OPC relationships
+│   ├── settings.rs
+│   ├── styles.rs       # paragraph + character styles
+│   ├── theme.rs        # Office theme
+│   └── web_settings.rs
+└── emit/               # AST → OOXML fragments
+    ├── ctx.rs          # EmitCtx (image/link/footnote/style registries)
+    ├── drawing.rs      # image embedding (inline + anchor)
+    ├── field.rs        # PAGE / NUMPAGES / SEQ / PAGEREF / TOC
+    ├── hyperlink.rs    # external + anchor hyperlinks, bookmarks
+    ├── paragraph.rs    # p, h1..6, title, blockquote, pagebreak dispatcher
+    ├── prepass.rs      # collect headings/captions/headers/footers/style overrides
+    ├── run.rs          # text runs with stacked rPr
+    ├── table.rs        # tbl/tr/tc with gridSpan, vMerge, shading
+    └── toc.rs          # TOC / LoT / LoF field emission with pre-populated entries
+```
+
+The whole pipeline emits children in canonical OOXML schema order on
+the first pass — no post-process repair step. This was the motivation
+for moving off `docx-rs`, which interleaved style metadata with pPr/rPr.
+
+##### Source property surface (everything is overrideable)
+
+OOXML's override model — `docDefaults → Style → pPr/rPr` — is mirrored
+in the source. Every layer is configurable:
+
+**Document metadata** (`[k:v, ...]` header):
+```
+[page-size:letter | a4 | legal | a5 | "WxH"]
+[margin:1in | "top right bottom left"]
+[margin-top, margin-right, margin-bottom, margin-left]
+[header, footer]            # offset from page edge in pt/in/cm/mm
+```
+
+**Style overrides** (top-level `style[id:...]` blocks patch styles.xml):
+```
+style[id:Heading1, color:"#C0392B", size:20pt, after:200dxa,
+      bold:true, italic:false, font:"Cambria",
+      keep-next:true, outline-lvl:0, border-top:true]
+```
+Recognized ids: `Normal`, `Heading1..6`, `Title`, `Caption`,
+`Hyperlink`, `FootnoteReference`, `TOC1..9`, `TOCHeading`,
+`TableofFigures`, `ListParagraph`.
+
+**Per-paragraph** (`p`, `title`, `h1..h6`, `blockquote`):
+```
+p[align:left|center|right|justify,
+  before:Npt, after:Npt, line:Npt | line:N.Nx,
+  size:Npt,
+  border-top:true,
+  tabs:"center,right" | "kind:pos,kind:pos"]
+```
+
+**Per-image:**
+```
+image[src:"...", w:6in, h:1.22in, float:inline|anchor|behind,
+      align:center, alt:"...", caption:"...",
+      before:..., after:..., line:...]
+```
+
+**Per-table / row / cell** — row.bg/color cascades into cells unless
+the cell overrides:
+```
+table[border:all|outer|none, stripe:true,
+      indent:Npt, widths:"344,2693,2977,2976",  # bare numbers are dxa
+      caption:"..."]
+  row[kind:header, bg:"#2E74B5", color:"#FFFFFF"]
+    cell[colspan:N, rowspan:N, bg:"...", color:"...",
+         align:..., valign:top|middle|bottom]
+```
+
+**Inline elements** in any text body:
+- `@text[weight:bold|light, style:italic, decoration:underline|strike,
+        color:..., bg:...](runs)`
+- `@code(monospace text)` → Courier New
+- `@link[to:"https://..." | "ref://_bookmark" | "#anchor"](visible text)`
+- `@footnote(footnote body)` — registers in `word/footnotes.xml`
+- `@page-number()` / `@total-pages()` → PAGE / NUMPAGES fields
+- `@tab()` → `<w:tab/>` (paired with `tabs:` on the paragraph)
+- `@br()` → `<w:br/>`
+
+**Reserved `section[id:...]` blocks:**
+- `section[id:toc, levels:"1-3"]` → TOC field with pre-populated
+  PAGEREF entries (Word's F9 / Update Field recomputes page numbers)
+- `section[id:list-of-tables]` / `[id:lot]` → LoT
+- `section[id:list-of-figures]` / `[id:lof]` → LoF
+
+**Headers / footers** are top-level blocks; `scope:` distinguishes
+default / first / even:
+```
+header[scope:first]{ p() }                    # cover page, blank
+header[scope:even]{ ... }                     # even pages
+header{ p(Document Title) }                   # default (odd + non-cover)
+footer{ p[border-top:true, tabs:"center,right", size:9pt](...) }
+```
+Empty `header[scope:first]{ p() }` (no visible content) is dropped to
+keep `<w:titlePg/>` off — matches the BoringCrypto reference's
+"declared-but-unused" first-scope chrome.
+
+##### docx2 migration notes
+
+- Schema-order safety. Each part hand-writes children in the order
+  CT_Style, CT_PPrBase, CT_RPrBase, CT_TcPr, CT_Lvl, etc. require.
+  Don't reorder without checking the OOXML spec — a wrong order
+  silently breaks Word's heading scan / TOC / numbering.
+- Word's empty-id / dangling-ref tolerance: settings.xml's
+  `<w:footnotePr>` / `<w:endnotePr>` reserve ids -1 and 0. Both
+  `footnotes.xml` and `endnotes.xml` parts must always exist (with
+  the matching boilerplate separator entries), or Word reports a
+  recovered document.
+- Image relative paths resolve against `DocxV2Exporter::with_image_base`
+  if set; otherwise the process CWD.
+- The default rId allocation reserves rIds 1..8 for static parts
+  (styles, numbering, theme, settings, webSettings, fontTable,
+  footnotes, endnotes); body-time rIds start at rId9.
+
+#### Legacy docx (via docx-rs)
+
 - Library: `docx-rs` 0.4.20.
-- Lists need an `AbstractNumbering` definition registered on the `Docx`
-  before referencing them from list-item paragraphs. The existing
-  exporter pre-registers two definitions (id 1 = decimal, id 2 = bullet),
-  each with 9 nesting levels. Reuse.
-- Built-in heading styles are named `Heading1`..`Heading9`. Word
-  recognizes them automatically.
-- Inline run styling: `Run::new().bold().italic().strike()`. Mix freely.
+- Carries a post-process "repair" pass (`crates/stem-exports/src/docx.rs`)
+  that reorders `<w:pPr>`, `<w:style>`, and `<w:lvl>` children into
+  canonical schema order. The docx2 path makes this unnecessary.
+- Built-in heading styles are named `Heading1`..`Heading9`.
 - For importer: the docx file is a ZIP. Use `zip` + an XML parser. The
   body is in `word/document.xml`. Walk `<w:p>` (paragraphs) and `<w:r>`
   (runs). Styles in `word/styles.xml` map Heading1..6 back to h1..h6.

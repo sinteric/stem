@@ -41,7 +41,7 @@ ul{
 | HTML    | —             | ✅ full                                                          |
 | Markdown| ✅ MVP        | ✅ MVP (round-trips with importer)                              |
 | PDF     | —             | ✅ MVP (custom fonts incl. CJK, real metrics, italic/bold)      |
-| docx    | planned       | ✅ MVP (headings, lists, inline styling, code)                  |
+| docx    | planned       | ✅ direct OOXML emitter (`docx2` feature) — full paragraph/run/table/image/footnote/TOC support with source-level style overrides |
 | xlsx    | planned       | ✅ MVP (cells, formulas, multi-sheet)                           |
 | pptx    | planned       | planned                                                         |
 | hwpx    | planned       | planned                                                         |

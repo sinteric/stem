@@ -122,7 +122,7 @@ p()
 h1[numbered:true](FIPS 140-2 Security Levels)
 p(The following table lists the level of validation for each area in FIPS 140-2:)
 table[border:all, caption:"Validation Level by FIPS 140-2 Section"]{
-  row[kind:header]{
+  row[kind:header, bg:"#2E74B5", color:"#FFFFFF"]{
     cell[align:center](@text[weight:bold](FIPS 140-2 Section Title))
     cell[align:center](@text[weight:bold](Validation Level))
   }
@@ -189,7 +189,7 @@ p(The module supports two modes of operation: Approved and Non-approved. The mod
 h1[numbered:true](Cryptographic Module Ports and Interfaces)
 p(The Data Input interface consists of the input parameters of the API functions. The Data Output interface consists of the output parameters of the API functions. The Control Input interface consists of the actual API input parameters. The Status Output interface includes the return values of the API functions.)
 table[border:all, caption:"Ports and Interfaces"]{
-  row[kind:header]{
+  row[kind:header, bg:"#2E74B5", color:"#FFFFFF"]{
     cell[align:center](@text[weight:bold](FIPS Interface))
     cell[align:center](@text[weight:bold](Physical Ports))
     cell[align:center](@text[weight:bold](Logical Interfaces))
@@ -226,7 +226,7 @@ h1[numbered:true](Roles, Authentication and Services)
 p("The cryptographic module implements both User and Crypto Officer \\(CO\\) roles. The module does not support user authentication. The User and CO roles are implicitly assumed by the entity accessing services implemented by the module. A user is considered the owner of the thread that instantiates the module and, therefore, only one concurrent user is allowed.")
 p(The Approved services supported by the module and access rights within services accessible over the module’s public interface are listed in the table below.)
 table[border:all, caption:"Approved Services, Roles and Access Rights"]{
-  row[kind:header]{
+  row[kind:header, bg:"#2E74B5", color:"#FFFFFF"]{
     cell[align:center](@text[weight:bold](Service))
     cell[align:center](@text[weight:bold](Approved security functions))
     cell[align:center](@text[weight:bold](Keys) @text[weight:bold]( and/or CSPs))
@@ -331,7 +331,7 @@ table[border:all, caption:"Approved Services, Roles and Access Rights"]{
 }
 p(The module provides the following non-Approved services which utilize algorithms listed in Table 9:)
 table[border:all, caption:"non-Approved or non-security relevant services"]{
-  row[kind:header]{
+  row[kind:header, bg:"#2E74B5", color:"#FFFFFF"]{
     cell[align:center](@text[weight:bold](Service))
     cell[align:center](@text[weight:bold](Non-Approved Functions))
     cell[align:center](@text[weight:bold](Roles))
@@ -377,7 +377,7 @@ table[border:all, caption:"non-Approved or non-security relevant services"]{
 p(The module also provides the following non-Approved or non-security relevant services over a non-public interface:)
 caption()
 table[border:all, caption:"Non-Security Relevant Services"]{
-  row[kind:header]{
+  row[kind:header, bg:"#2E74B5", color:"#FFFFFF"]{
     cell[align:center](@text[weight:bold](Service))
     cell[align:center]{
       p(@text[weight:bold](Approved Security))
@@ -417,7 +417,7 @@ h1[numbered:true](Cryptographic Algorithms & Key Management)
 h2[numbered:true](Approved Cryptographic Algorithms)
 p(The module implements the following FIPS 140-2 Approved algorithms:)
 table[border:all, caption:"Approved Algorithms and CAVP Certificates"]{
-  row[kind:header]{
+  row[kind:header, bg:"#2E74B5", color:"#FFFFFF"]{
     cell[align:center](@text[weight:bold](CAVP Cert #))
     cell[align:center](@text[weight:bold](Algorithm))
     cell[align:center](@text[weight:bold](Standard))
@@ -524,7 +524,7 @@ p()
 h2[numbered:true](Allowed Cryptographic Algorithms)
 p(The module supports the following non-FIPS 140-2 Approved but allowed algorithms that may be used in the Approved mode of operation.)
 table[border:all, caption:"Allowed Algorithms"]{
-  row[kind:header]{
+  row[kind:header, bg:"#2E74B5", color:"#FFFFFF"]{
     cell(@text[weight:bold](Algorithm))
     cell(@text[weight:bold](Use))
   }
@@ -548,7 +548,7 @@ table[border:all, caption:"Allowed Algorithms"]{
 h2[numbered:true](Non-Approved Cryptographic Algorithms)
 p(The module employs the methods listed in Table 9, which are not allowed for use in a FIPS-Approved mode. Their use will result in the module operating in a non-Approved mode.)
 table[border:all, caption:"Non-Approved Algorithms"]{
-  row[kind:header]{
+  row[kind:header, bg:"#2E74B5", color:"#FFFFFF"]{
     cell(MD5 , MD4)
     cell(DES)
   }
@@ -568,7 +568,7 @@ table[border:all, caption:"Non-Approved Algorithms"]{
 h2[numbered:true](Cryptographic Key Management)
 p(The table below provides a complete list of Private Keys and CSPs used by the module:)
 table[border:all, caption:"Keys and CSPs supported"]{
-  row[kind:header]{
+  row[kind:header, bg:"#2E74B5", color:"#FFFFFF"]{
     cell(@text[weight:bold](Key/CSP Name))
     cell(@text[weight:bold](Key Description ))
     cell(@text[weight:bold](Generated/ Input))
@@ -656,7 +656,7 @@ table[border:all, caption:"Keys and CSPs supported"]{
 h2[numbered:true](Public Keys)
 p(The table below provides a complete list of the Public keys used by the module:)
 table[border:all, caption:"Public keys supported"]{
-  row[kind:header]{
+  row[kind:header, bg:"#2E74B5", color:"#FFFFFF"]{
     cell(@text[weight:bold](Public Key Name))
     cell(@text[weight:bold](Key Description ))
   }
@@ -691,7 +691,7 @@ h2[numbered:true](Power-On Self-Tests)
 p(Power-on self-tests are run upon the initialization of the module and do not require operator intervention to run. If any of the tests fail, the module will not initialize. The module will enter an error state and no services can be accessed.)
 p(The module implements the following power-on self-tests:)
 table[border:all, caption:"Power-on Self-tests"]{
-  row[kind:header]{
+  row[kind:header, bg:"#2E74B5", color:"#FFFFFF"]{
     cell(@text[weight:bold](Type))
     cell(@text[weight:bold](Test))
   }
@@ -729,7 +729,7 @@ p(Each module performs all power-on self-tests automatically when the module is 
 h2[numbered:true](Conditional Self-Tests)
 p(Conditional self-tests are run during operation of the module.  If any of these tests fail, the module will enter an error state, where no services can be accessed by the operators. The module can be re-initialized to clear the error and resume FIPS mode of operation. Each module performs the following conditional self-tests:)
 table[border:all, caption:"Conditional Self-tests"]{
-  row[kind:header]{
+  row[kind:header, bg:"#2E74B5", color:"#FFFFFF"]{
     cell(@text[weight:bold](Type))
     cell(@text[weight:bold](Test))
   }
@@ -822,7 +822,7 @@ p(Approved algorithms shall not use the keys generated by the module’s non-App
 h1[numbered:true](References and Standards)
 p(The following Standards are referred to in this Security Policy.)
 table[border:all, caption:"References and Standards"]{
-  row[kind:header]{
+  row[kind:header, bg:"#2E74B5", color:"#FFFFFF"]{
     cell[align:center](@text[weight:bold](Abbreviation))
     cell[align:center](@text[weight:bold](Full Specification Name))
   }
@@ -880,7 +880,7 @@ table[border:all, caption:"References and Standards"]{
 }
 h1[numbered:true](Acronyms and Definitions)
 table[border:all, caption:"Acronyms and Definitions"]{
-  row[kind:header]{
+  row[kind:header, bg:"#2E74B5", color:"#FFFFFF"]{
     cell[align:center](@text[weight:bold](Acronym))
     cell[align:center](@text[weight:bold](Definition))
   }
