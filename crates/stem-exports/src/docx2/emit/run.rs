@@ -206,6 +206,16 @@ fn render_inline(inline: &Block, ctx: &mut EmitCtx, x: &mut XmlBuf, parent: &RPr
         }
         "page-number" => field::render_page(x),
         "total-pages" => field::render_num_pages(x),
+        "tab" => {
+            x.elem("w:r", &[], |x| {
+                x.empty("w:tab", &[]);
+            });
+        }
+        "br" => {
+            x.elem("w:r", &[], |x| {
+                x.empty("w:br", &[]);
+            });
+        }
         // Other inline elements — emit their text recursively
         // with no extra styling. Future tasks specialize as
         // needed.

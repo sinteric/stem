@@ -161,25 +161,122 @@ fn render_heading(b: &Block, level: u32, ctx: &mut EmitCtx, x: &mut XmlBuf) {
 
 fn render_paragraph(b: &Block, ctx: &mut EmitCtx, x: &mut XmlBuf) {
     x.elem("w:p", &[], |x| {
-        // Empty `p()` blocks are spacers, not body content — collapse
-        // the 8pt-after / 1.08x-line default to zero so a stack of
-        // them stays tight. The reference's cover uses 25+ empty
-        // paragraphs to position the logo; without this override
-        // they'd push content off the page.
-        if is_visually_empty(b) {
+        let visually_empty = is_visually_empty(b);
+        let border_top = b.prop_str("border-top") == Some("true");
+        let tabs = b.prop_str("tabs");
+        let align = b.prop_str("align").and_then(map_align);
+        let needs_p_pr = visually_empty || border_top || tabs.is_some() || align.is_some();
+        if needs_p_pr {
             x.elem("w:pPr", &[], |x| {
-                x.empty(
-                    "w:spacing",
-                    &[
-                        ("w:after", "0"),
-                        ("w:line", "240"),
-                        ("w:lineRule", "auto"),
-                    ],
-                );
+                // pBdr → tabs → spacing → jc per schema order.
+                if border_top {
+                    x.elem("w:pBdr", &[], |x| {
+                        x.empty(
+                            "w:top",
+                            &[
+                                ("w:val", "single"),
+                                ("w:sz", "4"),
+                                ("w:space", "1"),
+                                ("w:color", "auto"),
+                            ],
+                        );
+                    });
+                }
+                if let Some(spec) = tabs {
+                    render_tabs(x, spec);
+                }
+                if visually_empty {
+                    // Empty `p()` blocks are spacers — collapse the
+                    // 8pt-after / 1.08x-line default to zero so a
+                    // stack of them stays tight. The reference's
+                    // cover uses 25+ empty paragraphs to position
+                    // the logo; without this override they'd push
+                    // content off the page.
+                    x.empty(
+                        "w:spacing",
+                        &[
+                            ("w:after", "0"),
+                            ("w:line", "240"),
+                            ("w:lineRule", "auto"),
+                        ],
+                    );
+                }
+                if let Some(j) = align {
+                    x.empty("w:jc", &[("w:val", j)]);
+                }
             });
         }
         run::render_body(b, ctx, x);
     });
+}
+
+fn map_align(s: &str) -> Option<&'static str> {
+    match s {
+        "left" => Some("left"),
+        "right" => Some("right"),
+        "center" | "centre" => Some("center"),
+        "justify" | "both" => Some("both"),
+        _ => None,
+    }
+}
+
+/// Emit `<w:tabs>` from a spec like `"center,right"` or
+/// `"left:0,center:4675,right:9350"`. Bare alignment names use
+/// auto-computed positions for the letter-paper content width
+/// (9350 dxa).
+fn render_tabs(x: &mut XmlBuf, spec: &str) {
+    let stops: Vec<(String, String)> = parse_tab_spec(spec);
+    if stops.is_empty() {
+        return;
+    }
+    x.elem("w:tabs", &[], |x| {
+        for (val, pos) in &stops {
+            x.empty("w:tab", &[("w:val", val.as_str()), ("w:pos", pos.as_str())]);
+        }
+    });
+}
+
+fn parse_tab_spec(spec: &str) -> Vec<(String, String)> {
+    // Letter paper, 1" margins → 9350 dxa content width.
+    const CONTENT_W: u32 = 9350;
+    let names: Vec<&str> = spec.split(',').map(str::trim).filter(|s| !s.is_empty()).collect();
+    if names.is_empty() {
+        return Vec::new();
+    }
+    let mut out = Vec::with_capacity(names.len());
+    for name in &names {
+        // Allow "center:4675" explicit pos.
+        let (kind, pos_opt) = match name.split_once(':') {
+            Some((k, p)) => (k.trim(), p.trim().parse::<u32>().ok()),
+            None => (*name, None),
+        };
+        let val = match kind {
+            "left" | "right" | "center" | "decimal" | "bar" => kind,
+            _ => continue,
+        };
+        out.push((val.to_string(), pos_opt.map(|p| p.to_string())));
+    }
+    // Auto-distribute positions when not specified:
+    // - 1 stop: place at content end if "right", center if "center"
+    // - 2 stops: left edge + right edge (or specified)
+    // - 3+ stops: evenly distributed
+    let n = out.len();
+    let mut result = Vec::with_capacity(n);
+    for (i, (val, pos)) in out.into_iter().enumerate() {
+        let p = pos.unwrap_or_else(|| {
+            if val == "right" {
+                CONTENT_W.to_string()
+            } else if val == "center" {
+                (CONTENT_W / 2).to_string()
+            } else {
+                // For other named stops without explicit pos,
+                // distribute evenly.
+                ((i as u32 + 1) * CONTENT_W / (n as u32 + 1)).to_string()
+            }
+        });
+        result.push((val, p));
+    }
+    result
 }
 
 /// True if a paragraph's body contributes no visible runs — used
@@ -308,6 +405,39 @@ mod tests {
         let s = render(r#"blockquote(quoted text)"#);
         assert!(s.contains(r#"<w:ind w:left="720"/>"#));
         assert!(s.contains("quoted text"));
+    }
+
+    #[test]
+    fn paragraph_with_border_top_emits_pBdr() {
+        let s = render(r#"p[border-top:true](hello)"#);
+        assert!(s.contains("<w:pBdr>"));
+        assert!(s.contains(r#"<w:top w:val="single""#));
+    }
+
+    #[test]
+    fn paragraph_with_tabs_spec_emits_w_tabs_with_stops() {
+        let s = render(r#"p[tabs:"center,right"](a@tab()b@tab()c)"#);
+        assert!(s.contains("<w:tabs>"));
+        assert!(s.contains(r#"<w:tab w:val="center""#));
+        assert!(s.contains(r#"<w:tab w:val="right""#));
+        // Each `@tab()` emits a `<w:tab/>` inside its own run.
+        assert_eq!(s.matches("<w:tab/>").count(), 2);
+    }
+
+    #[test]
+    fn paragraph_align_center_emits_w_jc() {
+        let s = render(r#"p[align:center](centered)"#);
+        assert!(s.contains(r#"<w:jc w:val="center"/>"#));
+    }
+
+    #[test]
+    fn br_inline_emits_w_br_run() {
+        let s = render(r#"p(line1@br()line2)"#);
+        // <w:r><w:br/></w:r> between the two text runs.
+        let br = s.find("<w:br/>").unwrap();
+        let line1 = s.find("line1").unwrap();
+        let line2 = s.find("line2").unwrap();
+        assert!(line1 < br && br < line2);
     }
 
     #[test]
