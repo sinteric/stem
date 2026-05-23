@@ -309,4 +309,28 @@ fn example_boringcrypto_renders_structurally() {
         p_count > 100,
         "expected >100 paragraphs from boringcrypto, got {p_count}"
     );
+
+    // @text[weight:bold] appears in the source — task 7 must emit
+    // it as a bold run, not flatten it.
+    assert!(
+        doc.contains("<w:b/>"),
+        "expected at least one <w:b/> run from `@text[weight:bold]` in the source"
+    );
+}
+
+#[test]
+fn rich_text_pieces_become_separate_runs() {
+    // Tight end-to-end check on rPr extraction: a single paragraph
+    // with two inline overrides must produce three runs with the
+    // right rPr on each.
+    let bytes = export_stem(
+        r#"p(plain @text[weight:bold](bold) middle @text[style:italic](em) tail)"#,
+    );
+    let doc = read_entry(&bytes, "word/document.xml");
+    // Total runs in the document: 5 paragraph text runs.
+    let r_count = doc.matches("<w:r>").count() + doc.matches("<w:r ").count();
+    assert!(r_count >= 5, "expected at least 5 runs, got {r_count}: {doc}");
+    // Exactly one bold and one italic run.
+    assert_eq!(doc.matches("<w:b/>").count(), 1, "bold count mismatch");
+    assert_eq!(doc.matches("<w:i/>").count(), 1, "italic count mismatch");
 }
