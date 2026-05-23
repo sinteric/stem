@@ -118,8 +118,38 @@ fn render_heading(b: &Block, level: u32, ctx: &mut EmitCtx, x: &mut XmlBuf) {
 
 fn render_paragraph(b: &Block, ctx: &mut EmitCtx, x: &mut XmlBuf) {
     x.elem("w:p", &[], |x| {
+        // Empty `p()` blocks are spacers, not body content — collapse
+        // the 8pt-after / 1.08x-line default to zero so a stack of
+        // them stays tight. The reference's cover uses 25+ empty
+        // paragraphs to position the logo; without this override
+        // they'd push content off the page.
+        if is_visually_empty(b) {
+            x.elem("w:pPr", &[], |x| {
+                x.empty(
+                    "w:spacing",
+                    &[
+                        ("w:after", "0"),
+                        ("w:line", "240"),
+                        ("w:lineRule", "auto"),
+                    ],
+                );
+            });
+        }
         run::render_body(b, ctx, x);
     });
+}
+
+/// True if a paragraph's body contributes no visible runs — used
+/// to identify spacer paragraphs.
+fn is_visually_empty(b: &Block) -> bool {
+    match &b.body {
+        Body::None => true,
+        Body::Children(c) => c.is_empty(),
+        Body::Text(pieces) => pieces.iter().all(|p| match p {
+            stem_core::ast::TextPiece::Literal { text, .. } => text.trim().is_empty(),
+            stem_core::ast::TextPiece::Inline(_) => false,
+        }),
+    }
 }
 
 fn render_blockquote(b: &Block, ctx: &mut EmitCtx, x: &mut XmlBuf) {
