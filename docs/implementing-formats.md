@@ -255,22 +255,15 @@ the feature is off.
 
 ### docx (export: ✅ MVP, import: stub)
 
-Two implementations:
-
-- **`docx2`** (cargo feature `docx2`) — current direct-OOXML emitter.
-  Hand-emits each part as a string and packages via the `zip` crate.
-  Lives at `crates/stem-exports/src/docx2/`. This is the path we're
-  migrating to.
-- **`docx`** (cargo feature `docx`) — legacy path via the `docx-rs`
-  crate, kept until task 16 of the docx2 migration plan retires it.
-
-#### docx2 — direct OOXML emission
+Direct-OOXML emitter — hand-writes each part as a string and packages
+via the `zip` crate. (Earlier branches went through `docx-rs` with a
+post-process repair pass for schema-order bugs; that path is retired.)
 
 Layout:
 
 ```
-crates/stem-exports/src/docx2/
-├── mod.rs              # DocxV2Exporter + Exporter trait impl
+crates/stem-exports/src/docx/
+├── mod.rs              # DocxExporter + Exporter trait impl
 ├── xml.rs              # Small string-based XML builder
 ├── package.rs          # ZIP packaging (uses existing `zip` dep)
 ├── parts/              # One module per OOXML part
@@ -300,8 +293,7 @@ crates/stem-exports/src/docx2/
 ```
 
 The whole pipeline emits children in canonical OOXML schema order on
-the first pass — no post-process repair step. This was the motivation
-for moving off `docx-rs`, which interleaved style metadata with pPr/rPr.
+the first pass — no post-process repair step.
 
 ##### Source property surface (everything is overrideable)
 
@@ -326,6 +318,11 @@ Recognized ids: `Normal`, `Heading1..6`, `Title`, `Caption`,
 `Hyperlink`, `FootnoteReference`, `TOC1..9`, `TOCHeading`,
 `TableofFigures`, `ListParagraph`.
 
+Caption defaults to centered (`align:center`) — applies to both the
+"Figure N. …" paragraph emitted under images and the "Table N. …"
+paragraph emitted under tables. Override with `style[id:Caption,
+align:left]` if you want left-aligned captions.
+
 **Per-paragraph** (`p`, `title`, `h1..h6`, `blockquote`):
 ```
 p[align:left|center|right|justify,
@@ -341,17 +338,31 @@ image[src:"...", w:6in, h:1.22in, float:inline|anchor|behind,
       align:center, alt:"...", caption:"...",
       before:..., after:..., line:...]
 ```
+Default `align` for inline images is `center` so the image lands
+visually under its centered Caption. Override with
+`image[align:left|right|justify]` for body-flow figures. (No `Image`
+pStyle exists in OOXML for this default to live in, so it sits in
+the emitter — the one documented exception to "defaults live in
+styles".)
 
-**Per-table / row / cell** — row.bg/color cascades into cells unless
-the cell overrides:
+**Per-table / row / cell** — each property has a default-and-override
+layer (table → row → cell). `row.bg/color` cascades into cells, and
+`table.row-height` cascades into rows when the row doesn't set its
+own `height`:
 ```
 table[border:all|outer|none, stripe:true,
       indent:Npt, widths:"344,2693,2977,2976",  # bare numbers are dxa
+      row-height:20pt, row-height-rule:atLeast|exact|auto,
       caption:"..."]
-  row[kind:header, bg:"#2E74B5", color:"#FFFFFF"]
+  row[kind:header, bg:"#2E74B5", color:"#FFFFFF",
+      height:24pt, height-rule:atLeast|exact|auto]
     cell[colspan:N, rowspan:N, bg:"...", color:"...",
          align:..., valign:top|middle|bottom]
 ```
+`row[height:..]` (or `table[row-height:..]`) sets the minimum row
+height by default; use `height-rule:exact` to force a fixed height
+(Word will clip overflowing content) or `height-rule:auto` to ignore
+the value.
 
 **Inline elements** in any text body:
 - `@text[weight:bold|light, style:italic, decoration:underline|strike,
@@ -381,7 +392,7 @@ Empty `header[scope:first]{ p() }` (no visible content) is dropped to
 keep `<w:titlePg/>` off — matches the BoringCrypto reference's
 "declared-but-unused" first-scope chrome.
 
-##### docx2 migration notes
+##### Implementation notes
 
 - Schema-order safety. Each part hand-writes children in the order
   CT_Style, CT_PPrBase, CT_RPrBase, CT_TcPr, CT_Lvl, etc. require.
@@ -392,23 +403,18 @@ keep `<w:titlePg/>` off — matches the BoringCrypto reference's
   `footnotes.xml` and `endnotes.xml` parts must always exist (with
   the matching boilerplate separator entries), or Word reports a
   recovered document.
-- Image relative paths resolve against `DocxV2Exporter::with_image_base`
+- Image relative paths resolve against `DocxExporter::with_image_base`
   if set; otherwise the process CWD.
 - The default rId allocation reserves rIds 1..8 for static parts
   (styles, numbering, theme, settings, webSettings, fontTable,
   footnotes, endnotes); body-time rIds start at rId9.
 
-#### Legacy docx (via docx-rs)
+#### Importing docx (stub)
 
-- Library: `docx-rs` 0.4.20.
-- Carries a post-process "repair" pass (`crates/stem-exports/src/docx.rs`)
-  that reorders `<w:pPr>`, `<w:style>`, and `<w:lvl>` children into
-  canonical schema order. The docx2 path makes this unnecessary.
-- Built-in heading styles are named `Heading1`..`Heading9`.
-- For importer: the docx file is a ZIP. Use `zip` + an XML parser. The
-  body is in `word/document.xml`. Walk `<w:p>` (paragraphs) and `<w:r>`
-  (runs). Styles in `word/styles.xml` map Heading1..6 back to h1..h6.
-  Numbering definitions in `word/numbering.xml` identify lists.
+For an importer: the docx file is a ZIP. Use `zip` + an XML parser.
+The body is in `word/document.xml`. Walk `<w:p>` (paragraphs) and
+`<w:r>` (runs). Styles in `word/styles.xml` map Heading1..6 back to
+h1..h6. Numbering definitions in `word/numbering.xml` identify lists.
 
 ### xlsx (export: ✅ MVP, import: stub)
 

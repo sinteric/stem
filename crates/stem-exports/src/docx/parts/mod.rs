@@ -7,7 +7,7 @@ use stem_core::ast::Document;
 
 use super::emit::ctx::EmitCtx;
 use super::package::Package;
-use super::DocxV2Error;
+use super::DocxError;
 
 /// rId space layout for `document.xml.rels`:
 /// rIds 1..STATIC_RID_COUNT inclusive are the static parts
@@ -68,7 +68,7 @@ mod content_type_names {
 /// emitted from `doc.blocks` via the paragraph dispatcher in
 /// [`super::emit::paragraph`]. `image_base` is used by the drawing
 /// emitter to resolve relative `image[src:...]` paths.
-pub fn package_doc(doc: &Document, image_base: Option<&Path>) -> Result<Vec<u8>, DocxV2Error> {
+pub fn package_doc(doc: &Document, image_base: Option<&Path>) -> Result<Vec<u8>, DocxError> {
     let mut ctx = EmitCtx::new(image_base, STATIC_RID_COUNT + 1);
     let body_xml = document::body(doc, &mut ctx);
     // Header/footer parts need to render with the ctx so any
@@ -92,7 +92,7 @@ pub fn package_doc(doc: &Document, image_base: Option<&Path>) -> Result<Vec<u8>,
 /// Build a docx with a single empty paragraph. Kept so the
 /// scaffold tests (and the dev `STEM_DOCX2_DUMP` smoke artifact)
 /// have a deterministic minimum reference.
-pub fn minimal_empty_doc() -> Result<Vec<u8>, DocxV2Error> {
+pub fn minimal_empty_doc() -> Result<Vec<u8>, DocxError> {
     let ctx = EmitCtx::new(None, STATIC_RID_COUNT + 1);
     pack(document::minimal(), &ctx, &[], &[])
 }
@@ -102,7 +102,7 @@ fn pack(
     ctx: &EmitCtx,
     header_xmls: &[String],
     footer_xmls: &[String],
-) -> Result<Vec<u8>, DocxV2Error> {
+) -> Result<Vec<u8>, DocxError> {
     use content_type_names as ct;
 
     let mut ct_builder = content_types::builder()

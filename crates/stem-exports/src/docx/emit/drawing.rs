@@ -66,10 +66,21 @@ pub fn render_image(b: &Block, ctx: &mut EmitCtx, x: &mut XmlBuf) {
     // Image paragraphs honor the same spacing + alignment
     // primitives as `p`: `[before:..]`, `[after:..]`, `[line:..]`,
     // `[align:..]` go through to the wrapping `<w:p>`'s pPr.
+    //
+    // Default alignment: **center**. Inline images are visually
+    // partnered with the centered Caption paragraph below, and the
+    // academic-paper convention is to center figures. Authors that
+    // want the body's natural left flow opt in explicitly via
+    // `image[align:left]`. OOXML has no "Image" pStyle for this
+    // default to live in, so it sits in the emitter — an
+    // unavoidable exception to "defaults live in styles".
     let before = b.prop_str("before").and_then(super::paragraph::parse_dxa);
     let after = b.prop_str("after").and_then(super::paragraph::parse_dxa);
     let line = b.prop_str("line").and_then(super::paragraph::parse_line);
-    let align = b.prop_str("align").and_then(super::paragraph::map_align);
+    let align = b
+        .prop_str("align")
+        .and_then(super::paragraph::map_align)
+        .or(Some("center"));
     let has_spacing = before.is_some() || after.is_some() || line.is_some();
     let needs_p_pr = has_spacing || align.is_some();
     x.elem("w:p", &[], |x| {
@@ -587,7 +598,7 @@ mod tests {
                 .unwrap_or(0);
             let n = COUNTER.fetch_add(1, Ordering::Relaxed);
             let pid = std::process::id();
-            let p = std::env::temp_dir().join(format!("docx2-test-{pid}-{nanos}-{n}"));
+            let p = std::env::temp_dir().join(format!("docx-test-{pid}-{nanos}-{n}"));
             std::fs::create_dir_all(&p).unwrap();
             Self(p)
         }

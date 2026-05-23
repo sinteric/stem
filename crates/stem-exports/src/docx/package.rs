@@ -9,7 +9,7 @@
 
 use std::io::{Cursor, Write};
 
-use super::DocxV2Error;
+use super::DocxError;
 
 /// One entry in the package: the part's path inside the ZIP
 /// (e.g. `word/document.xml`, `word/media/image1.png`) and its
@@ -68,18 +68,18 @@ impl Package {
         self
     }
 
-    pub fn finish(self) -> Result<Vec<u8>, DocxV2Error> {
+    pub fn finish(self) -> Result<Vec<u8>, DocxError> {
         write_zip(&self.parts)
     }
 }
 
 /// One-shot pack of a slice of parts. Used by the task-1 minimal
 /// scaffold; later parts of the pipeline build via [`Package`].
-pub fn pack(parts: &[Part]) -> Result<Vec<u8>, DocxV2Error> {
+pub fn pack(parts: &[Part]) -> Result<Vec<u8>, DocxError> {
     write_zip(parts)
 }
 
-fn write_zip(parts: &[Part]) -> Result<Vec<u8>, DocxV2Error> {
+fn write_zip(parts: &[Part]) -> Result<Vec<u8>, DocxError> {
     let mut buf: Vec<u8> = Vec::new();
     {
         let cursor = Cursor::new(&mut buf);
@@ -88,12 +88,12 @@ fn write_zip(parts: &[Part]) -> Result<Vec<u8>, DocxV2Error> {
             zip::write::FileOptions::default().compression_method(zip::CompressionMethod::Deflated);
         for part in parts {
             zip.start_file(&part.path, opts)
-                .map_err(|e| DocxV2Error::Pack(format!("zip start {}: {}", part.path, e)))?;
+                .map_err(|e| DocxError::Pack(format!("zip start {}: {}", part.path, e)))?;
             zip.write_all(&part.data)
-                .map_err(|e| DocxV2Error::Pack(format!("zip write {}: {}", part.path, e)))?;
+                .map_err(|e| DocxError::Pack(format!("zip write {}: {}", part.path, e)))?;
         }
         zip.finish()
-            .map_err(|e| DocxV2Error::Pack(format!("zip finish: {}", e)))?;
+            .map_err(|e| DocxError::Pack(format!("zip finish: {}", e)))?;
     }
     Ok(buf)
 }

@@ -661,7 +661,8 @@ fn render_real_styles(x: &mut XmlBuf, overrides: &[super::super::emit::ctx::Styl
         })
         .render_with(x, overrides);
 
-    // Caption — figure/table captions.
+    // Caption — figure/table captions. Centered by default; authors
+    // can override via `style[id:Caption, align:left|right|justify]`.
     Style::paragraph("Caption", "caption")
         .based_on("Normal")
         .next("Normal")
@@ -669,6 +670,10 @@ fn render_real_styles(x: &mut XmlBuf, overrides: &[super::super::emit::ctx::Styl
         .semi_hidden()
         .unhide_when_used()
         .q_format()
+        .p_pr(PPr {
+            jc: Some("center".into()),
+            ..Default::default()
+        })
         .r_pr(RPr {
             italic: true,
             color: Some("44546A".into()),

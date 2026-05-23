@@ -12,25 +12,15 @@ stem-types = { workspace = true }
 thiserror = { workspace = true }
 pulldown-latex = { version = "0.7.1", optional = true }
 printpdf = { version = "0.9.1", optional = true }
-docx-rs = { version = "0.4.20", optional = true }
-# Used by the docx exporter at runtime to post-process the produced
-# zip: docx-rs emits some OOXML elements with children out of the
-# spec-required order (e.g. `<w:rPr>` before `<w:pStyle>` inside
-# `<w:pPr>`, which breaks heading rendering and TOC scan on strict
-# Word builds). We unpack each .xml part, reorder, and repack.
+# `zip` packages the OOXML parts the `docx` module emits directly.
 zip = { version = "0.6", default-features = false, features = ["deflate"], optional = true }
 rust_xlsxwriter = { version = "0.95.0", optional = true }
 
 [dev-dependencies]
 stem-imports = { workspace = true, features = ["markdown"] }
 # Used by docx tests to crack open the produced .docx ZIP and grep the
-# OOXML in `word/document.xml`. Same major version that docx-rs pulls
-# in transitively, so cargo unifies on one copy.
+# OOXML in `word/document.xml`.
 zip = { version = "0.6", default-features = false, features = ["deflate"] }
-# Used by stage-3 image tests to mint a real tiny PNG at runtime so we
-# don't ship binary fixtures. docx-rs already enables this crate by
-# default, so no extra resolution cost.
-image = { version = "0.25", default-features = false, features = ["png"] }
 
 [features]
 default = ["html"]
@@ -38,9 +28,6 @@ default = ["html"]
 html = ["dep:pulldown-latex"]
 markdown = []
 pdf = ["dep:printpdf"]
-docx = ["dep:docx-rs", "dep:zip"]
-# In-progress direct-OOXML emitter. Will replace `docx` once it
-# reaches feature parity. Both can be enabled at once during migration.
-docx2 = ["dep:zip"]
+docx = ["dep:zip"]
 xlsx = ["dep:rust_xlsxwriter"]
-all = ["html", "markdown", "docx", "docx2", "pdf", "xlsx"]
+all = ["html", "markdown", "docx", "pdf", "xlsx"]

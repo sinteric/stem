@@ -138,7 +138,7 @@ pub struct HeadingAnchor {
 /// `style[id:..., ...]` blocks become `StyleOverride` entries that
 /// patch the matching `<w:style>` in `word/styles.xml`. Every
 /// attribute is `Option`-wrapped so an unset field means "inherit
-/// the docx2 default for this style"; a set field replaces it.
+/// the docx default for this style"; a set field replaces it.
 #[derive(Clone, Default)]
 pub struct StyleOverride {
     pub id: String,

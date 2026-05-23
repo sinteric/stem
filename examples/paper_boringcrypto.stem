@@ -77,7 +77,7 @@ h1[numbered:true](Introduction)
 p("Google Inc. BoringCrypto module \\(hereafter referred to as the “module”\\) is an open-source, general-purpose cryptographic library which provides FIPS 140-2 approved cryptographic algorithms to serve BoringSSL and other user-space applications. The validated version of the library is 66005f41fbc3529ffe8d007708756720529da20d. For the purposes of the FIPS 140-2 validation, its embodiment type is defined as multi-chip standalone.")
 p("The cryptographic module was tested on the following operational environments on the general-purpose computer \\(GPC\\) platforms detailed below:")
 table[border:all, indent:0.25in, widths:"344,2693,2977,2976", caption:"Tested Operational Environments"]{
-  row[kind:header, bg:"#2E74B5", color:"#FFFFFF"]{
+  row[kind:header, bg:"#2E74B5", color:"#FFFFFF", height:24pt]{
     cell(#)
     cell(Operational Environment)
     cell(Processor Family)
@@ -121,8 +121,8 @@ p()
 p()
 h1[numbered:true](FIPS 140-2 Security Levels)
 p(The following table lists the level of validation for each area in FIPS 140-2:)
-table[border:all, caption:"Validation Level by FIPS 140-2 Section"]{
-  row[kind:header, bg:"#2E74B5", color:"#FFFFFF"]{
+table[border:all, row-height:20pt, caption:"Validation Level by FIPS 140-2 Section"]{
+  row[kind:header, bg:"#2E74B5", color:"#FFFFFF", height:24pt]{
     cell[align:center](@text[weight:bold](FIPS 140-2 Section Title))
     cell[align:center](@text[weight:bold](Validation Level))
   }

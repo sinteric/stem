@@ -184,7 +184,7 @@ pub fn body(doc: &Document, ctx: &mut EmitCtx) -> String {
 }
 
 /// Original minimal body — a single empty paragraph + section
-/// properties. Kept for the docx2 test that needs a known-fixed
+/// properties. Kept for the docx test that needs a known-fixed
 /// reference (and for the dev-only `STEM_DOCX2_DUMP` smoke check
 /// when the caller passes no source).
 pub fn minimal() -> String {

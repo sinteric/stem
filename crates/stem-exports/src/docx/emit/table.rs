@@ -56,6 +56,14 @@ pub fn render_table(b: &Block, ctx: &mut EmitCtx, x: &mut XmlBuf) {
         .prop_str("indent")
         .and_then(super::paragraph::parse_dxa);
 
+    // Table-level defaults that cascade into rows when the row
+    // doesn't set its own value. Mirrors the existing row→cell
+    // cascade for bg/color so authors can set the property once at
+    // the layer where it makes sense (the table) rather than
+    // repeating it on every row.
+    let table_row_height = b.prop_str("row-height").and_then(super::paragraph::parse_dxa);
+    let table_row_height_rule = b.prop_str("row-height-rule").and_then(parse_height_rule);
+
     let rows: &[Block] = match &b.body {
         Body::Children(c) => c,
         _ => &[],
@@ -88,6 +96,8 @@ pub fn render_table(b: &Block, ctx: &mut EmitCtx, x: &mut XmlBuf) {
                 stripe,
                 data_row_idx,
                 &col_widths,
+                table_row_height,
+                table_row_height_rule,
                 &mut pending,
                 ctx,
                 x,
@@ -99,6 +109,19 @@ pub fn render_table(b: &Block, ctx: &mut EmitCtx, x: &mut XmlBuf) {
     });
 
     emit_caption(b, ctx, x);
+}
+
+/// Parse the `height-rule` / `row-height-rule` property to OOXML's
+/// `w:hRule`. Returns `None` for unrecognized values so the caller
+/// can keep the default ("atLeast", which OOXML implies when the
+/// attribute is omitted).
+fn parse_height_rule(s: &str) -> Option<&'static str> {
+    match s {
+        "atLeast" | "at-least" | "min" => Some("atLeast"),
+        "exact" => Some("exact"),
+        "auto" => Some("auto"),
+        _ => None,
+    }
 }
 
 fn resolve_col_widths(spec: Option<&str>, grid_cols: usize) -> Vec<u32> {
@@ -260,17 +283,42 @@ fn render_tr(
     stripe: bool,
     data_row_idx: usize,
     col_widths: &[u32],
+    table_row_height: Option<u32>,
+    table_row_height_rule: Option<&'static str>,
     pending: &mut Vec<RowspanCarry>,
     ctx: &mut EmitCtx,
     x: &mut XmlBuf,
 ) {
     let row_bg = row.prop_str("bg").and_then(normalize_hex);
     let row_color = row.prop_str("color").and_then(normalize_hex);
+    // Row height cascade: explicit `row[height:..]` > table-level
+    // `table[row-height:..]` default. Same for the rule. `height:Npt`
+    // (or any unit `parse_dxa` accepts) sets `<w:trHeight w:val=N/>`;
+    // `height-rule:` picks OOXML's `w:hRule` — `atLeast` (default),
+    // `exact`, or `auto`.
+    let row_height = row
+        .prop_str("height")
+        .and_then(super::paragraph::parse_dxa)
+        .or(table_row_height);
+    let row_height_rule = row
+        .prop_str("height-rule")
+        .and_then(parse_height_rule)
+        .or(table_row_height_rule);
     x.elem("w:tr", &[], |x| {
-        if is_header {
+        if is_header || row_height.is_some() {
             x.elem("w:trPr", &[], |x| {
-                // Repeat header row when a table spans page breaks.
-                x.empty("w:tblHeader", &[]);
+                if let Some(h) = row_height {
+                    let h_s = h.to_string();
+                    let mut attrs: Vec<(&str, &str)> = vec![("w:val", h_s.as_str())];
+                    if let Some(rule) = row_height_rule {
+                        attrs.push(("w:hRule", rule));
+                    }
+                    x.empty("w:trHeight", &attrs);
+                }
+                if is_header {
+                    // Repeat header row when a table spans page breaks.
+                    x.empty("w:tblHeader", &[]);
+                }
             });
         }
 
@@ -675,6 +723,77 @@ mod tests {
 }"#,
         );
         assert!(s.contains(r#"<w:jc w:val="right"/>"#));
+    }
+
+    #[test]
+    fn row_height_emits_tr_height_with_default_rule() {
+        // `row[height:24pt]` → `<w:trHeight w:val="480"/>` (no
+        // hRule attribute = atLeast, OOXML's default).
+        let s = render(
+            r#"table{
+  row[height:24pt]{ cell(tall) }
+}"#,
+        );
+        assert!(
+            s.contains(r#"<w:trHeight w:val="480"/>"#),
+            "expected w:trHeight w:val=480 (24pt = 480 dxa): {s}"
+        );
+    }
+
+    #[test]
+    fn row_height_rule_exact_propagates_to_tr_height() {
+        let s = render(
+            r#"table{
+  row[height:30pt, height-rule:exact]{ cell(fixed) }
+}"#,
+        );
+        assert!(
+            s.contains(r#"<w:trHeight w:val="600" w:hRule="exact"/>"#),
+            "expected exact rule on trHeight: {s}"
+        );
+    }
+
+    #[test]
+    fn row_height_coexists_with_header_marker() {
+        // Both `height:` and `kind:header` go into the same <w:trPr>.
+        let s = render(
+            r#"table{
+  row[kind:header, height:22pt]{ cell(H) }
+}"#,
+        );
+        assert!(s.contains(r#"<w:trHeight w:val="440"/>"#), "{s}");
+        assert!(s.contains("<w:tblHeader/>"), "{s}");
+    }
+
+    #[test]
+    fn table_row_height_cascades_into_unset_rows() {
+        // `table[row-height:20pt]` applies to every row that doesn't
+        // set its own `height:`. The 24pt header overrides; the bare
+        // row inherits the table default.
+        let s = render(
+            r#"table[row-height:20pt]{
+  row[kind:header, height:24pt]{ cell(H) }
+  row{ cell(A) }
+  row{ cell(B) }
+}"#,
+        );
+        assert!(s.contains(r#"<w:trHeight w:val="480"/>"#), "header keeps its own 24pt: {s}");
+        // Two data rows each pick up 400 dxa (= 20pt).
+        let inherited = s.matches(r#"<w:trHeight w:val="400"/>"#).count();
+        assert_eq!(inherited, 2, "expected 2 rows to inherit 20pt: {s}");
+    }
+
+    #[test]
+    fn table_row_height_rule_cascades_alongside_height() {
+        let s = render(
+            r#"table[row-height:18pt, row-height-rule:exact]{
+  row{ cell(a) }
+}"#,
+        );
+        assert!(
+            s.contains(r#"<w:trHeight w:val="360" w:hRule="exact"/>"#),
+            "expected cascaded exact rule: {s}"
+        );
     }
 
     #[test]

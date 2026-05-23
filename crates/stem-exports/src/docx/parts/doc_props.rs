@@ -65,7 +65,7 @@ pub fn app() -> String {
     let mut x = XmlBuf::new();
     x.xml_decl();
     x.elem("Properties", &[("xmlns", NS_EXT_PROPS)], |x| {
-        x.elem_text("Application", &[], "Stem (docx2)", false);
+        x.elem_text("Application", &[], "Stem", false);
         x.elem_text("DocSecurity", &[], "0", false);
         x.elem_text("ScaleCrop", &[], "false", false);
         x.elem_text("SharedDoc", &[], "false", false);
@@ -125,7 +125,7 @@ mod tests {
     #[test]
     fn app_has_application() {
         let s = app();
-        assert!(s.contains("<Application>Stem (docx2)</Application>"));
+        assert!(s.contains("<Application>Stem</Application>"));
     }
 
     #[test]
