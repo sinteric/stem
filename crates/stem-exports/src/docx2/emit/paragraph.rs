@@ -38,6 +38,10 @@ pub fn render_block(b: &Block, ctx: &mut EmitCtx, x: &mut XmlBuf) {
                 render_children(b, ctx, x);
             }
         }
+        // Header + footer are emitted as separate OOXML parts
+        // (headerN.xml / footerN.xml) by the packager — drop them
+        // from the body walk.
+        "header" | "footer" => {}
         // Anything else not yet handled: emit as a plain paragraph
         // carrying the block's text. Keeps the output structurally
         // complete while later tasks (7-14) take over each block

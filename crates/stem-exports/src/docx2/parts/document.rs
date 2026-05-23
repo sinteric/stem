@@ -29,6 +29,19 @@ const NS_PIC: &str = "http://schemas.openxmlformats.org/drawingml/2006/picture";
 /// even when it sits at the start of the document.
 pub fn body(doc: &Document, ctx: &mut EmitCtx) -> String {
     prepass::collect(doc, ctx);
+    // Pre-allocate header/footer rIds so sectPr can reference them
+    // and the packager can produce `<Relationship>` entries with
+    // matching ids.
+    for _ in 0..ctx.headers.len() {
+        let rid = ctx.alloc_rid();
+        ctx.header_rids.push(rid);
+    }
+    for _ in 0..ctx.footers.len() {
+        let rid = ctx.alloc_rid();
+        ctx.footer_rids.push(rid);
+    }
+    let header_rids = ctx.header_rids.clone();
+    let footer_rids = ctx.footer_rids.clone();
     let mut x = XmlBuf::new();
     x.xml_decl();
     x.elem_with_ns(
@@ -46,7 +59,7 @@ pub fn body(doc: &Document, ctx: &mut EmitCtx) -> String {
                 for block in &doc.blocks {
                     paragraph::render_block(block, ctx, x);
                 }
-                render_sect_pr(x);
+                render_sect_pr_with_refs(x, &header_rids, &footer_rids);
             });
         },
     );
@@ -75,7 +88,27 @@ pub fn minimal() -> String {
 }
 
 fn render_sect_pr(x: &mut XmlBuf) {
+    render_sect_pr_with_refs(x, &[], &[]);
+}
+
+fn render_sect_pr_with_refs(x: &mut XmlBuf, header_rids: &[String], footer_rids: &[String]) {
     x.elem("w:sectPr", &[], |x| {
+        // Header/footer references come BEFORE pgSz per the schema.
+        // For task 13 each registered header/footer becomes a
+        // "default" reference (applied to all pages); "first" and
+        // "even" variants stay out of scope.
+        for rid in header_rids {
+            x.empty(
+                "w:headerReference",
+                &[("w:type", "default"), ("r:id", rid.as_str())],
+            );
+        }
+        for rid in footer_rids {
+            x.empty(
+                "w:footerReference",
+                &[("w:type", "default"), ("r:id", rid.as_str())],
+            );
+        }
         x.empty("w:pgSz", &[("w:w", "12240"), ("w:h", "15840")]);
         x.empty(
             "w:pgMar",

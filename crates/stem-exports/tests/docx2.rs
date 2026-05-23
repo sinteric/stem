@@ -407,6 +407,46 @@ fn boringcrypto_renders_all_tables() {
 }
 
 #[test]
+fn header_and_footer_become_separate_parts() {
+    let bytes = export_stem(
+        r#"header{ p(My document) }
+footer{ p(Page @page-number() of @total-pages()) }
+h1(Body)"#,
+    );
+
+    // The body must NOT contain the header/footer text — they
+    // live in their own parts now.
+    let doc = read_entry(&bytes, "word/document.xml");
+    assert!(!doc.contains("My document"), "header text leaked into body");
+
+    // sectPr names both via headerReference / footerReference.
+    assert!(doc.contains("<w:headerReference "));
+    assert!(doc.contains("<w:footerReference "));
+
+    // header1.xml + footer1.xml exist with the right roots.
+    let h1 = read_entry(&bytes, "word/header1.xml");
+    assert!(h1.contains("<w:hdr"));
+    assert!(h1.contains("My document"));
+    let f1 = read_entry(&bytes, "word/footer1.xml");
+    assert!(f1.contains("<w:ftr"));
+    // Footer pulls in real PAGE/NUMPAGES fields from the inline
+    // field emitter.
+    assert!(f1.contains(" PAGE "));
+    assert!(f1.contains(" NUMPAGES "));
+
+    // Content_Types registers both.
+    let ct = read_entry(&bytes, "[Content_Types].xml");
+    assert!(ct.contains("/word/header1.xml"));
+    assert!(ct.contains("/word/footer1.xml"));
+    // Document rels include header + footer entries.
+    let doc_rels = read_entry(&bytes, "word/_rels/document.xml.rels");
+    assert!(doc_rels.contains(r#"Target="header1.xml""#));
+    assert!(doc_rels.contains(r#"Target="footer1.xml""#));
+    assert!(doc_rels.contains("relationships/header"));
+    assert!(doc_rels.contains("relationships/footer"));
+}
+
+#[test]
 fn toc_section_emits_field_with_prepopulated_heading_entries() {
     let bytes = export_stem(
         r#"section[id:toc]

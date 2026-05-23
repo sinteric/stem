@@ -56,9 +56,24 @@ fn walk(blocks: &[Block], ctx: &mut EmitCtx, table_seq: &mut u32, figure_seq: &m
             }
             // Container-shaped blocks — recurse to find headings
             // and captions nested inside them.
-            "section" | "header" | "footer" => {
+            "section" => {
                 if let Body::Children(children) = &b.body {
                     walk(children, ctx, table_seq, figure_seq);
+                }
+            }
+            // Header and footer blocks become separate parts —
+            // capture their children (the contents that will go
+            // into headerN.xml / footerN.xml) and do NOT recurse
+            // into them for heading/caption collection (page
+            // chrome shouldn't contribute to the TOC).
+            "header" => {
+                if let Body::Children(children) = &b.body {
+                    ctx.headers.push(children.clone());
+                }
+            }
+            "footer" => {
+                if let Body::Children(children) = &b.body {
+                    ctx.footers.push(children.clone());
                 }
             }
             _ => {

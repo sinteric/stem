@@ -20,6 +20,7 @@ pub mod content_types;
 pub mod doc_props;
 pub mod document;
 pub mod font_table;
+pub mod header_footer;
 pub mod numbering;
 pub mod rels;
 pub mod settings;
@@ -67,7 +68,22 @@ mod content_type_names {
 pub fn package_doc(doc: &Document, image_base: Option<&Path>) -> Result<Vec<u8>, DocxV2Error> {
     let mut ctx = EmitCtx::new(image_base, STATIC_RID_COUNT + 1);
     let body_xml = document::body(doc, &mut ctx);
-    pack(body_xml, &ctx)
+    // Header/footer parts need to render with the ctx so any
+    // embedded `@page-number()` / `@total-pages()` inlines emit
+    // the right fields. We snapshot the blocks first and clear
+    // them from the ctx so the recursive emission doesn't double-
+    // collect.
+    let headers = std::mem::take(&mut ctx.headers);
+    let footers = std::mem::take(&mut ctx.footers);
+    let mut header_xmls: Vec<String> = Vec::with_capacity(headers.len());
+    for blocks in &headers {
+        header_xmls.push(header_footer::header(blocks, &mut ctx));
+    }
+    let mut footer_xmls: Vec<String> = Vec::with_capacity(footers.len());
+    for blocks in &footers {
+        footer_xmls.push(header_footer::footer(blocks, &mut ctx));
+    }
+    pack(body_xml, &ctx, &header_xmls, &footer_xmls)
 }
 
 /// Build a docx with a single empty paragraph. Kept so the
@@ -75,10 +91,15 @@ pub fn package_doc(doc: &Document, image_base: Option<&Path>) -> Result<Vec<u8>,
 /// have a deterministic minimum reference.
 pub fn minimal_empty_doc() -> Result<Vec<u8>, DocxV2Error> {
     let ctx = EmitCtx::new(None, STATIC_RID_COUNT + 1);
-    pack(document::minimal(), &ctx)
+    pack(document::minimal(), &ctx, &[], &[])
 }
 
-fn pack(document_body_xml: String, ctx: &EmitCtx) -> Result<Vec<u8>, DocxV2Error> {
+fn pack(
+    document_body_xml: String,
+    ctx: &EmitCtx,
+    header_xmls: &[String],
+    footer_xmls: &[String],
+) -> Result<Vec<u8>, DocxV2Error> {
     use content_type_names as ct;
 
     let mut ct_builder = content_types::builder()
@@ -91,6 +112,14 @@ fn pack(document_body_xml: String, ctx: &EmitCtx) -> Result<Vec<u8>, DocxV2Error
         .override_part("/word/fontTable.xml", ct::FONT_TABLE)
         .override_part("/docProps/core.xml", ct::CORE)
         .override_part("/docProps/app.xml", ct::EXTENDED);
+    for (i, _) in header_xmls.iter().enumerate() {
+        ct_builder = ct_builder
+            .override_part(&format!("/word/header{}.xml", i + 1), ct::HEADER);
+    }
+    for (i, _) in footer_xmls.iter().enumerate() {
+        ct_builder = ct_builder
+            .override_part(&format!("/word/footer{}.xml", i + 1), ct::FOOTER);
+    }
     // Register a Default content-type per image extension actually
     // used so Word knows how to decode the bytes.
     let mut image_exts: Vec<&str> = ctx.images.iter().map(|i| i.ext.as_str()).collect();
@@ -129,6 +158,20 @@ fn pack(document_body_xml: String, ctx: &EmitCtx) -> Result<Vec<u8>, DocxV2Error
             &link.url,
         ));
     }
+    for (i, rid) in ctx.header_rids.iter().enumerate() {
+        doc_rels.push(rels::Rel::new(
+            rid,
+            rels::kind::HEADER,
+            format!("header{}.xml", i + 1),
+        ));
+    }
+    for (i, rid) in ctx.footer_rids.iter().enumerate() {
+        doc_rels.push(rels::Rel::new(
+            rid,
+            rels::kind::FOOTER,
+            format!("footer{}.xml", i + 1),
+        ));
+    }
     let doc_rels_xml = rels::build(&doc_rels);
 
     let mut pkg = Package::new();
@@ -146,6 +189,12 @@ fn pack(document_body_xml: String, ctx: &EmitCtx) -> Result<Vec<u8>, DocxV2Error
     pkg.add_text("docProps/app.xml", doc_props::app());
     for img in &ctx.images {
         pkg.add_bytes(img.zip_path.clone(), img.bytes.clone());
+    }
+    for (i, xml) in header_xmls.iter().enumerate() {
+        pkg.add_text(format!("word/header{}.xml", i + 1), xml.clone());
+    }
+    for (i, xml) in footer_xmls.iter().enumerate() {
+        pkg.add_text(format!("word/footer{}.xml", i + 1), xml.clone());
     }
     pkg.finish()
 }

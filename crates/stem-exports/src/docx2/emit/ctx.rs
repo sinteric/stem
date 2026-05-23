@@ -16,6 +16,8 @@
 
 use std::path::{Path, PathBuf};
 
+use stem_core::ast::Block;
+
 /// One image embedded in the docx. Populated by the drawing
 /// emitter; consumed by the packager.
 #[derive(Clone)]
@@ -78,6 +80,17 @@ pub struct EmitCtx {
     /// Pre-collected caption anchors (tables + figures) in
     /// document order. LoT/LoF emission walks this vector.
     pub captions: Vec<CaptionAnchor>,
+    /// Collected `header{...}` block bodies. Each becomes its own
+    /// `word/headerN.xml` part with a Default-type reference in
+    /// `<w:sectPr>`.
+    pub headers: Vec<Vec<Block>>,
+    /// Same for `footer{...}` blocks.
+    pub footers: Vec<Vec<Block>>,
+    /// rId allocated for `headers[i]`'s relationship — populated
+    /// just before body emission so `<w:headerReference r:id="…"/>`
+    /// in sectPr can name it.
+    pub header_rids: Vec<String>,
+    pub footer_rids: Vec<String>,
 }
 
 /// Bookmark + display text for one heading. Populated by the
@@ -128,6 +141,10 @@ impl EmitCtx {
             heading_anchors: Vec::new(),
             heading_cursor: 0,
             captions: Vec::new(),
+            headers: Vec::new(),
+            footers: Vec::new(),
+            header_rids: Vec::new(),
+            footer_rids: Vec::new(),
         }
     }
 
