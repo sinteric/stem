@@ -407,6 +407,35 @@ fn boringcrypto_renders_all_tables() {
 }
 
 #[test]
+fn page_and_numpages_inlines_emit_fields() {
+    let bytes = export_stem(r#"p(Page @page-number() of @total-pages())"#);
+    let doc = read_entry(&bytes, "word/document.xml");
+    assert!(
+        doc.contains(r#"w:instr=" PAGE   \* MERGEFORMAT ""#),
+        "missing PAGE field: {doc}"
+    );
+    assert!(
+        doc.contains(r#"w:instr=" NUMPAGES   \* MERGEFORMAT ""#),
+        "missing NUMPAGES field"
+    );
+}
+
+#[test]
+fn table_caption_emits_seq_field_with_table_label() {
+    let bytes = export_stem(
+        r#"table[caption:"First"]{ row{ cell(a) } }
+table[caption:"Second"]{ row{ cell(b) } }"#,
+    );
+    let doc = read_entry(&bytes, "word/document.xml");
+    // Two SEQ Table fields — one per caption.
+    let seq_count = doc.matches(r#"w:instr=" SEQ Table \* ARABIC ""#).count();
+    assert_eq!(seq_count, 2, "expected 2 SEQ Table fields, got {seq_count}");
+    // Pre-computed numbers 1 and 2 appear in the cached results.
+    assert!(doc.contains(r#"<w:t xml:space="preserve">1</w:t>"#));
+    assert!(doc.contains(r#"<w:t xml:space="preserve">2</w:t>"#));
+}
+
+#[test]
 fn rich_text_pieces_become_separate_runs() {
     // Tight end-to-end check on rPr extraction: a single paragraph
     // with two inline overrides must produce three runs with the

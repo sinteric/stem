@@ -47,6 +47,11 @@ pub struct EmitCtx {
     /// Number used for the next `wp:docPr` / `pic:cNvPr` id.
     /// Independent from rIds.
     next_drawing_id: u32,
+    /// Caption counters — `SEQ Table` and `SEQ Figure` instances
+    /// emit the pre-computed number into the cached field result
+    /// so the document reads correctly before the user presses F9.
+    pub table_caption_seq: u32,
+    pub figure_caption_seq: u32,
 }
 
 impl EmitCtx {
@@ -60,6 +65,8 @@ impl EmitCtx {
             images: Vec::new(),
             next_rid: start_rid,
             next_drawing_id: 1,
+            table_caption_seq: 0,
+            figure_caption_seq: 0,
         }
     }
 

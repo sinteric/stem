@@ -27,7 +27,7 @@ pub fn render_block(b: &Block, ctx: &mut EmitCtx, x: &mut XmlBuf) {
         "p" => render_paragraph(b, x),
         "blockquote" => render_blockquote(b, x),
         "pagebreak" => render_pagebreak(x),
-        "table" => table::render_table(b, x),
+        "table" => table::render_table(b, ctx, x),
         "image" => drawing::render_image(b, ctx, x),
         // Container-shaped blocks — recurse into their child blocks
         // so nested paragraphs land at the body level. Task 6 does

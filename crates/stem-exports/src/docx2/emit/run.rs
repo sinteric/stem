@@ -28,6 +28,7 @@
 use stem_core::ast::{Block, Body, TextPiece};
 
 use super::super::xml::XmlBuf;
+use super::field;
 
 /// Run properties. `Option` fields layer over inherited values
 /// from a parent inline; `bool` fields turn a property on
@@ -202,11 +203,8 @@ fn render_inline(inline: &Block, x: &mut XmlBuf, parent: &RPr) {
         // goes into the footnote, not the paragraph, so we drop
         // it here.
         "footnote" => {}
-        // Deferred to task 10 — placeholder space so the
-        // surrounding text spacing doesn't collapse.
-        "page-number" | "total-pages" => {
-            emit_run("  ", parent, x);
-        }
+        "page-number" => field::render_page(x),
+        "total-pages" => field::render_num_pages(x),
         // Other inline elements — emit their text recursively
         // with no extra styling. Future tasks specialize as
         // needed.
@@ -424,11 +422,10 @@ mod tests {
     }
 
     #[test]
-    fn page_number_inline_emits_placeholder_space() {
+    fn page_number_inline_emits_PAGE_field() {
         let s = render_runs(r#"p(Page @page-number() of @total-pages())"#);
-        // Two placeholder runs were emitted with the text "  ".
-        let placeholders = s.matches(r#"<w:t xml:space="preserve">  </w:t>"#).count();
-        assert_eq!(placeholders, 2, "got: {s}");
+        assert!(s.contains(r#"w:instr=" PAGE   \* MERGEFORMAT ""#));
+        assert!(s.contains(r#"w:instr=" NUMPAGES   \* MERGEFORMAT ""#));
     }
 
     #[test]

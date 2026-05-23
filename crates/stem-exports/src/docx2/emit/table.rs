@@ -25,7 +25,8 @@
 use stem_core::ast::{Block, Body};
 
 use super::super::xml::XmlBuf;
-use super::run;
+use super::ctx::EmitCtx;
+use super::{field, run};
 
 /// Content area on letter paper with 1" margins everywhere: 12240
 /// dxa page width minus 2×1440 dxa margins.
@@ -34,8 +35,10 @@ const CONTENT_WIDTH_DXA: u32 = 12240 - 2 * 1440;
 const STRIPE_FILL: &str = "F2F2F2";
 
 /// Emit a `<w:tbl>` from a `table` block plus a trailing caption
-/// paragraph if `caption:` is set.
-pub fn render_table(b: &Block, x: &mut XmlBuf) {
+/// paragraph if `caption:` is set. `ctx` carries the table SEQ
+/// counter so the cached field result on the caption matches
+/// document order.
+pub fn render_table(b: &Block, ctx: &mut EmitCtx, x: &mut XmlBuf) {
     let border_mode = match b.prop_str("border").unwrap_or("none") {
         "all" => BorderMode::All,
         "outer" => BorderMode::Outer,
@@ -55,7 +58,7 @@ pub fn render_table(b: &Block, x: &mut XmlBuf) {
     if grid_cols == 0 {
         // Empty table — emit just the caption (if any) so caption
         // numbering still advances on a future SEQ pass.
-        emit_caption(b, x);
+        emit_caption(b, ctx, x);
         return;
     }
     let col_w_dxa = CONTENT_WIDTH_DXA / grid_cols as u32;
@@ -88,7 +91,7 @@ pub fn render_table(b: &Block, x: &mut XmlBuf) {
         }
     });
 
-    emit_caption(b, x);
+    emit_caption(b, ctx, x);
 }
 
 #[derive(Clone, Copy)]
@@ -411,18 +414,27 @@ fn emit_cell_paragraph(b: &Block, cell_align: Option<&'static str>, base: &super
     });
 }
 
-fn emit_caption(b: &Block, x: &mut XmlBuf) {
+fn emit_caption(b: &Block, ctx: &mut EmitCtx, x: &mut XmlBuf) {
     let Some(text) = b.prop_str("caption") else {
         return;
     };
+    ctx.table_caption_seq += 1;
+    let seq_n = ctx.table_caption_seq;
     x.elem("w:p", &[], |x| {
         x.elem("w:pPr", &[], |x| {
             x.empty("w:pStyle", &[("w:val", "Caption")]);
         });
-        // Caption paragraphs are plain text for task 8; task 12
-        // wires the SEQ field + bookmark anchor for LoT entries.
+        // "Table " label run.
         x.elem("w:r", &[], |x| {
-            x.elem_text("w:t", &[], text, true);
+            x.elem_text("w:t", &[], "Table ", true);
+        });
+        // SEQ Table field — Word increments this on F9. Cached
+        // result matches our pre-computed counter so the caption
+        // reads right on first open.
+        field::render_seq("Table", seq_n, x);
+        // Separator + user-provided caption text.
+        x.elem("w:r", &[], |x| {
+            x.elem_text("w:t", &[], &format!(". {text}"), true);
         });
     });
 }
@@ -463,10 +475,11 @@ mod tests {
 
     fn render(src: &str) -> String {
         let r = parse(src);
+        let mut ctx = EmitCtx::new(None, 1);
         let mut x = XmlBuf::new();
         for b in &r.document.blocks {
             if b.name == "table" {
-                render_table(b, &mut x);
+                render_table(b, &mut ctx, &mut x);
             }
         }
         x.finish()
@@ -478,7 +491,11 @@ mod tests {
         // No <w:tbl>, just the caption paragraph.
         assert!(!s.contains("<w:tbl>"));
         assert!(s.contains("<w:pStyle w:val=\"Caption\"/>"));
-        assert!(s.contains("Hi"));
+        // Caption text is wrapped in "Table N. <text>" with a SEQ
+        // field for the number.
+        assert!(s.contains("Table "));
+        assert!(s.contains(". Hi"));
+        assert!(s.contains(r#"w:instr=" SEQ Table \* ARABIC ""#));
     }
 
     #[test]
@@ -578,7 +595,7 @@ mod tests {
     }
 
     #[test]
-    fn caption_emits_below_table_with_caption_style() {
+    fn caption_emits_below_table_with_caption_style_and_seq_field() {
         let s = render(
             r#"table[caption:"Hello"]{
   row{ cell(A) }
@@ -587,6 +604,9 @@ mod tests {
         let tbl_pos = s.find("<w:tbl>").unwrap();
         let cap_pos = s.find(r#"<w:pStyle w:val="Caption"/>"#).unwrap();
         assert!(tbl_pos < cap_pos, "caption should come after tbl");
+        // Caption text format: "Table N. <text>".
+        assert!(s.contains(". Hello"));
+        assert!(s.contains(r#"w:instr=" SEQ Table \* ARABIC ""#));
     }
 
     #[test]
