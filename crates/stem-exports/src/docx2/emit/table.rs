@@ -38,6 +38,13 @@ const STRIPE_FILL: &str = "F2F2F2";
 /// paragraph if `caption:` is set. `ctx` carries the table SEQ
 /// counter so the cached field result on the caption matches
 /// document order.
+///
+/// Property-driven attributes (all reference-matching):
+/// - `border: all | outer | none` → `<w:tblBorders>`
+/// - `stripe: true` → alternating data-row fill F2F2F2
+/// - `indent: Npt | Nin | ...` → `<w:tblInd>` (table left indent)
+/// - `widths: "a,b,c,d"` → per-column `<w:gridCol w:w>` values
+///   in dxa; falls back to auto-distributed content width.
 pub fn render_table(b: &Block, ctx: &mut EmitCtx, x: &mut XmlBuf) {
     let border_mode = match b.prop_str("border").unwrap_or("none") {
         "all" => BorderMode::All,
@@ -45,30 +52,29 @@ pub fn render_table(b: &Block, ctx: &mut EmitCtx, x: &mut XmlBuf) {
         _ => BorderMode::None,
     };
     let stripe = b.prop_str("stripe").map(|v| v == "true").unwrap_or(false);
+    let indent_dxa = b
+        .prop_str("indent")
+        .and_then(super::paragraph::parse_dxa);
 
     let rows: &[Block] = match &b.body {
         Body::Children(c) => c,
         _ => &[],
     };
 
-    // Count grid columns from the first source row, accounting for
-    // colspan. The same column count applies to every row by Word's
-    // table model.
     let grid_cols = compute_grid_cols(rows);
     if grid_cols == 0 {
-        // Empty table — emit just the caption (if any) so caption
-        // numbering still advances on a future SEQ pass.
         emit_caption(b, ctx, x);
         return;
     }
-    let col_w_dxa = CONTENT_WIDTH_DXA / grid_cols as u32;
+
+    // Per-column widths come from `[widths:"a,b,c,…"]` on the
+    // table; missing entries auto-distribute the remaining content
+    // width.
+    let col_widths = resolve_col_widths(b.prop_str("widths"), grid_cols);
 
     x.elem("w:tbl", &[], |x| {
-        render_tbl_pr(x, border_mode);
-        render_tbl_grid(x, grid_cols, col_w_dxa);
-        // Rowspan continuation: for each grid column, track remaining
-        // continuation rows + their colspan so we can synthesize
-        // `<w:vMerge/>` continuation cells in subsequent rows.
+        render_tbl_pr(x, border_mode, indent_dxa);
+        render_tbl_grid(x, &col_widths);
         let mut pending: Vec<RowspanCarry> = Vec::new();
         let mut data_row_idx: usize = 0;
         for row in rows {
@@ -81,7 +87,7 @@ pub fn render_table(b: &Block, ctx: &mut EmitCtx, x: &mut XmlBuf) {
                 is_header,
                 stripe,
                 data_row_idx,
-                col_w_dxa,
+                &col_widths,
                 &mut pending,
                 ctx,
                 x,
@@ -93,6 +99,39 @@ pub fn render_table(b: &Block, ctx: &mut EmitCtx, x: &mut XmlBuf) {
     });
 
     emit_caption(b, ctx, x);
+}
+
+fn resolve_col_widths(spec: Option<&str>, grid_cols: usize) -> Vec<u32> {
+    let default_each = CONTENT_WIDTH_DXA / grid_cols as u32;
+    let mut out: Vec<u32> = (0..grid_cols).map(|_| default_each).collect();
+    let Some(spec) = spec else {
+        return out;
+    };
+    for (i, raw) in spec.split(',').enumerate() {
+        if i >= grid_cols {
+            break;
+        }
+        if let Some(dxa) = parse_column_width(raw.trim()) {
+            out[i] = dxa;
+        }
+    }
+    out
+}
+
+/// Per-column width parser. Unlike `parse_dxa` (which treats bare
+/// numbers as points), table grid widths are conventionally
+/// expressed in raw dxa (Word's `<w:gridCol w:w="…"/>` unit), so a
+/// bare number is interpreted as already-dxa. Explicit units
+/// (`pt`/`in`/`cm`/`mm`/`px`) convert through `parse_dxa`.
+fn parse_column_width(s: &str) -> Option<u32> {
+    let t = s.trim();
+    if t.is_empty() {
+        return None;
+    }
+    if t.chars().all(|c| c.is_ascii_digit() || c == '.') {
+        return t.parse::<f64>().ok().map(|v| v.round() as u32);
+    }
+    super::paragraph::parse_dxa(t)
 }
 
 #[derive(Clone, Copy)]
@@ -135,12 +174,16 @@ fn compute_grid_cols(rows: &[Block]) -> usize {
         .unwrap_or(0)
 }
 
-fn render_tbl_pr(x: &mut XmlBuf, mode: BorderMode) {
+fn render_tbl_pr(x: &mut XmlBuf, mode: BorderMode, indent_dxa: Option<u32>) {
     x.elem("w:tblPr", &[], |x| {
         x.empty(
             "w:tblW",
             &[("w:w", "0"), ("w:type", "auto")],
         );
+        if let Some(ind) = indent_dxa {
+            let s = ind.to_string();
+            x.empty("w:tblInd", &[("w:w", &s), ("w:type", "dxa")]);
+        }
         render_tbl_borders(x, mode);
         // Fixed layout keeps explicit column widths honored.
         x.empty("w:tblLayout", &[("w:type", "fixed")]);
@@ -202,11 +245,11 @@ fn render_tbl_borders(x: &mut XmlBuf, mode: BorderMode) {
     }
 }
 
-fn render_tbl_grid(x: &mut XmlBuf, cols: usize, col_w_dxa: u32) {
+fn render_tbl_grid(x: &mut XmlBuf, col_widths: &[u32]) {
     x.elem("w:tblGrid", &[], |x| {
-        let w = col_w_dxa.to_string();
-        for _ in 0..cols {
-            x.empty("w:gridCol", &[("w:w", &w)]);
+        for w in col_widths {
+            let s = w.to_string();
+            x.empty("w:gridCol", &[("w:w", &s)]);
         }
     });
 }
@@ -216,11 +259,13 @@ fn render_tr(
     is_header: bool,
     stripe: bool,
     data_row_idx: usize,
-    col_w_dxa: u32,
+    col_widths: &[u32],
     pending: &mut Vec<RowspanCarry>,
     ctx: &mut EmitCtx,
     x: &mut XmlBuf,
 ) {
+    let row_bg = row.prop_str("bg").and_then(normalize_hex);
+    let row_color = row.prop_str("color").and_then(normalize_hex);
     x.elem("w:tr", &[], |x| {
         if is_header {
             x.elem("w:trPr", &[], |x| {
@@ -240,7 +285,8 @@ fn render_tr(
             // Continuation slot from a prior row's vMerge.
             if grid_col < pending.len() && pending[grid_col].remaining > 0 {
                 let carry = pending[grid_col];
-                render_continuation_tc(carry.grid_span, col_w_dxa, x);
+                let w = sum_widths(col_widths, grid_col, carry.grid_span);
+                render_continuation_tc(carry.grid_span, w, x);
                 for i in 0..carry.grid_span {
                     if let Some(slot) = pending.get_mut(grid_col + i) {
                         slot.remaining = slot.remaining.saturating_sub(1);
@@ -264,19 +310,34 @@ fn render_tr(
                 .filter(|&n| n > 0)
                 .unwrap_or(1);
 
-            let force_bg = if !is_header && stripe && data_row_idx % 2 == 1 {
-                Some(STRIPE_FILL.to_string())
-            } else {
-                None
-            };
+            // Cell bg cascade: explicit cell bg > row bg > stripe.
+            let force_bg = cell
+                .prop_str("bg")
+                .and_then(normalize_hex)
+                .or_else(|| row_bg.clone())
+                .or_else(|| {
+                    if !is_header && stripe && data_row_idx % 2 == 1 {
+                        Some(STRIPE_FILL.to_string())
+                    } else {
+                        None
+                    }
+                });
 
+            // Cell color cascade: explicit cell color > row color.
+            let cell_color = cell
+                .prop_str("color")
+                .and_then(normalize_hex)
+                .or_else(|| row_color.clone());
+
+            let w = sum_widths(col_widths, grid_col, colspan);
             render_tc(
                 cell,
                 is_header,
                 colspan,
                 rowspan,
-                col_w_dxa,
+                w,
                 force_bg,
+                cell_color,
                 ctx,
                 x,
             );
@@ -311,8 +372,17 @@ fn render_tr(
     });
 }
 
-fn render_continuation_tc(grid_span: usize, col_w_dxa: u32, x: &mut XmlBuf) {
-    let w = (col_w_dxa * grid_span as u32).to_string();
+fn sum_widths(widths: &[u32], start: usize, span: usize) -> u32 {
+    widths
+        .iter()
+        .skip(start)
+        .take(span)
+        .copied()
+        .sum::<u32>()
+}
+
+fn render_continuation_tc(grid_span: usize, tcw_dxa: u32, x: &mut XmlBuf) {
+    let w = tcw_dxa.to_string();
     let span_s = grid_span.to_string();
     x.elem("w:tc", &[], |x| {
         x.elem("w:tcPr", &[], |x| {
@@ -332,14 +402,15 @@ fn render_tc(
     is_header: bool,
     colspan: usize,
     rowspan: u32,
-    col_w_dxa: u32,
+    tcw_dxa: u32,
     force_bg: Option<String>,
+    color: Option<String>,
     ctx: &mut EmitCtx,
     x: &mut XmlBuf,
 ) {
-    let w = (col_w_dxa * colspan as u32).to_string();
+    let w = tcw_dxa.to_string();
     let span_s = colspan.to_string();
-    let bg = force_bg.or_else(|| cell.prop_str("bg").and_then(normalize_hex));
+    let bg = force_bg;
     let valign = cell.prop_str("valign").and_then(map_valign);
 
     x.elem("w:tc", &[], |x| {
@@ -366,19 +437,22 @@ fn render_tc(
 
         // Cell content — at least one paragraph required, even if
         // the cell is "empty".
-        emit_cell_paragraphs(cell, is_header, ctx, x);
+        emit_cell_paragraphs(cell, is_header, color.as_deref(), ctx, x);
     });
 }
 
-fn emit_cell_paragraphs(cell: &Block, is_header: bool, ctx: &mut EmitCtx, x: &mut XmlBuf) {
+fn emit_cell_paragraphs(
+    cell: &Block,
+    is_header: bool,
+    color: Option<&str>,
+    ctx: &mut EmitCtx,
+    x: &mut XmlBuf,
+) {
     let cell_align = cell.prop_str("align").and_then(map_jc);
-    let base_rpr = if is_header {
-        super::run::RPr {
-            bold: true,
-            ..Default::default()
-        }
-    } else {
-        super::run::RPr::default()
+    let base_rpr = super::run::RPr {
+        bold: is_header,
+        color: color.map(|s| s.to_string()),
+        ..Default::default()
     };
 
     let mut emitted = 0usize;

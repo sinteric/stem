@@ -76,8 +76,8 @@ pagebreak
 h1[numbered:true](Introduction)
 p("Google Inc. BoringCrypto module \\(hereafter referred to as the “module”\\) is an open-source, general-purpose cryptographic library which provides FIPS 140-2 approved cryptographic algorithms to serve BoringSSL and other user-space applications. The validated version of the library is 66005f41fbc3529ffe8d007708756720529da20d. For the purposes of the FIPS 140-2 validation, its embodiment type is defined as multi-chip standalone.")
 p("The cryptographic module was tested on the following operational environments on the general-purpose computer \\(GPC\\) platforms detailed below:")
-table[border:all, caption:"Tested Operational Environments"]{
-  row[kind:header]{
+table[border:all, indent:0.25in, widths:"344,2693,2977,2976", caption:"Tested Operational Environments"]{
+  row[kind:header, bg:"#2E74B5", color:"#FFFFFF"]{
     cell(#)
     cell(Operational Environment)
     cell(Processor Family)
