@@ -69,11 +69,9 @@ fn walk(blocks: &[Block], ctx: &mut EmitCtx, table_seq: &mut u32, figure_seq: &m
             "header" => {
                 if let Body::Children(children) = &b.body {
                     let scope = HeaderFooterScope::from_prop(b.prop_str("scope"));
-                    // Skip duplicates of the same scope — only the
-                    // first one wins. (The source can have N
-                    // `header{}` blocks; Word allows at most one
-                    // per type per section.)
-                    if !ctx.header_scopes.contains(&scope) {
+                    if should_keep_chrome(scope, children)
+                        && !ctx.header_scopes.contains(&scope)
+                    {
                         ctx.headers.push(children.clone());
                         ctx.header_scopes.push(scope);
                     }
@@ -82,7 +80,9 @@ fn walk(blocks: &[Block], ctx: &mut EmitCtx, table_seq: &mut u32, figure_seq: &m
             "footer" => {
                 if let Body::Children(children) = &b.body {
                     let scope = HeaderFooterScope::from_prop(b.prop_str("scope"));
-                    if !ctx.footer_scopes.contains(&scope) {
+                    if should_keep_chrome(scope, children)
+                        && !ctx.footer_scopes.contains(&scope)
+                    {
                         ctx.footers.push(children.clone());
                         ctx.footer_scopes.push(scope);
                     }
@@ -94,6 +94,34 @@ fn walk(blocks: &[Block], ctx: &mut EmitCtx, table_seq: &mut u32, figure_seq: &m
                 }
             }
         }
+    }
+}
+
+/// Decide whether a header/footer block should land in the
+/// registry. Default-scope chrome is always kept; first/even
+/// scopes are kept only when they carry visible runs. An empty
+/// first-scope footer would force `<w:titlePg/>` and suppress
+/// the default footer on the cover even though the author
+/// presumably wanted the default. (The BoringCrypto reference
+/// has dangling `w:type="first"` refs without titlePg for
+/// exactly this reason.)
+fn should_keep_chrome(scope: HeaderFooterScope, children: &[Block]) -> bool {
+    match scope {
+        HeaderFooterScope::Default => true,
+        HeaderFooterScope::First | HeaderFooterScope::Even => {
+            children.iter().any(has_visible_content)
+        }
+    }
+}
+
+fn has_visible_content(b: &Block) -> bool {
+    match &b.body {
+        Body::None => false,
+        Body::Text(pieces) => pieces.iter().any(|p| match p {
+            TextPiece::Literal { text, .. } => !text.trim().is_empty(),
+            TextPiece::Inline(_) => true,
+        }),
+        Body::Children(c) => c.iter().any(has_visible_content),
     }
 }
 
