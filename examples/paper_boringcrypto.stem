@@ -6,8 +6,8 @@ header{ p() }
 header[scope:first]{ p() }
 footer[scope:even]{ p() }
 footer{
-  p[border-top:true, tabs:"center,right", after:0pt, line:1.0x](Google Inc. 2018@tab()Version 1.7@tab()Page @page-number() of @total-pages())
-  p[align:center, after:0pt, line:1.0x](Public Material – May be reproduced only in its original entirety \(without revision\).)
+  p[border-top:true, tabs:"center,right", after:0pt, line:1.0x, size:9pt](Google Inc. 2018@tab()Version 1.7@tab()Page @page-number() of @total-pages())
+  p[align:center, after:0pt, line:1.0x, size:9pt](Public Material – May be reproduced only in its original entirety \(without revision\).)
 }
 footer[scope:first]{ p() }
 

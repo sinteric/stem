@@ -163,6 +163,7 @@ fn render_paragraph(b: &Block, ctx: &mut EmitCtx, x: &mut XmlBuf) {
         let before = b.prop_str("before").and_then(parse_length_to_dxa);
         let after = b.prop_str("after").and_then(parse_length_to_dxa);
         let line = b.prop_str("line").and_then(parse_line_height);
+        let size_hp = b.prop_str("size").and_then(parse_length_to_half_points);
         let border_top = b.prop_str("border-top") == Some("true");
         let tabs = b.prop_str("tabs");
         let align = b.prop_str("align").and_then(map_align);
@@ -177,10 +178,11 @@ fn render_paragraph(b: &Block, ctx: &mut EmitCtx, x: &mut XmlBuf) {
             || has_explicit_spacing
             || border_top
             || tabs.is_some()
-            || align.is_some();
+            || align.is_some()
+            || size_hp.is_some();
         if needs_p_pr {
             x.elem("w:pPr", &[], |x| {
-                // pBdr → tabs → spacing → jc per schema order.
+                // pBdr → tabs → spacing → jc → rPr per schema order.
                 if border_top {
                     x.elem("w:pBdr", &[], |x| {
                         x.empty(
@@ -217,9 +219,35 @@ fn render_paragraph(b: &Block, ctx: &mut EmitCtx, x: &mut XmlBuf) {
                 if let Some(j) = align {
                     x.empty("w:jc", &[("w:val", j)]);
                 }
+                // Paragraph-mark rPr override — so the trailing
+                // pilcrow renders at the requested font size and
+                // any later text in the same paragraph mark line
+                // matches.
+                if let Some(sz) = size_hp {
+                    let s = sz.to_string();
+                    x.elem("w:rPr", &[], |x| {
+                        x.empty("w:sz", &[("w:val", &s)]);
+                        x.empty("w:szCs", &[("w:val", &s)]);
+                    });
+                }
             });
         }
-        run::render_body(b, ctx, x);
+        // Per-run base rPr — when `[size:..]` is set, every run in
+        // the paragraph inherits the size unless an inline element
+        // overrides it.
+        let base = if let Some(sz) = size_hp {
+            run::RPr {
+                size_hp: Some(sz),
+                ..Default::default()
+            }
+        } else {
+            run::RPr::default()
+        };
+        if size_hp.is_some() {
+            run::render_body_with(b, ctx, x, &base);
+        } else {
+            run::render_body(b, ctx, x);
+        }
     });
 }
 
