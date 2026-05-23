@@ -23,12 +23,22 @@ use super::super::xml::XmlBuf;
 const NS_W: &str = "http://schemas.openxmlformats.org/wordprocessingml/2006/main";
 
 pub fn settings() -> String {
+    settings_with(false)
+}
+
+/// Settings part with optional `<w:evenAndOddHeaders/>` flag.
+/// Word renders the "even" `w:headerReference` / `w:footerReference`
+/// variants only when this flag is set.
+pub fn settings_with(even_and_odd: bool) -> String {
     let mut x = XmlBuf::new();
     x.xml_decl();
     x.elem("w:settings", &[("xmlns:w", NS_W)], |x| {
         x.empty("w:zoom", &[("w:percent", "100")]);
         x.empty("w:defaultTabStop", &[("w:val", "720")]);
         x.empty("w:characterSpacingControl", &[("w:val", "doNotCompress")]);
+        if even_and_odd {
+            x.empty("w:evenAndOddHeaders", &[]);
+        }
         x.elem("w:footnotePr", &[], |x| {
             x.empty("w:footnote", &[("w:id", "-1")]);
             x.empty("w:footnote", &[("w:id", "0")]);

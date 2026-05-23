@@ -80,12 +80,16 @@ pub struct EmitCtx {
     /// Pre-collected caption anchors (tables + figures) in
     /// document order. LoT/LoF emission walks this vector.
     pub captions: Vec<CaptionAnchor>,
-    /// Collected `header{...}` block bodies. Each becomes its own
-    /// `word/headerN.xml` part with a Default-type reference in
-    /// `<w:sectPr>`.
+    /// Collected `header{...}` block bodies in source order. Each
+    /// becomes its own `word/headerN.xml` part, with a
+    /// `<w:headerReference w:type="…"/>` in `<w:sectPr>` using
+    /// the matching scope from `header_scopes`.
     pub headers: Vec<Vec<Block>>,
+    /// Per-header scope (default / first / even) from the source.
+    pub header_scopes: Vec<HeaderFooterScope>,
     /// Same for `footer{...}` blocks.
     pub footers: Vec<Vec<Block>>,
+    pub footer_scopes: Vec<HeaderFooterScope>,
     /// rId allocated for `headers[i]`'s relationship — populated
     /// just before body emission so `<w:headerReference r:id="…"/>`
     /// in sectPr can name it.
@@ -143,6 +147,37 @@ pub enum CaptionKind {
     Figure,
 }
 
+/// Which pages a header/footer applies to. Maps directly to the
+/// `w:type` attribute on `<w:headerReference>` / `<w:footerReference>`.
+#[derive(Clone, Copy, PartialEq, Eq)]
+pub enum HeaderFooterScope {
+    /// All pages without a more specific override.
+    Default,
+    /// First page of the section. Requires `<w:titlePg/>` in
+    /// sectPr.
+    First,
+    /// Even-numbered pages. Requires `<w:evenAndOddHeaders/>` in
+    /// settings.xml.
+    Even,
+}
+
+impl HeaderFooterScope {
+    pub fn from_prop(s: Option<&str>) -> Self {
+        match s {
+            Some("first") => Self::First,
+            Some("even") => Self::Even,
+            _ => Self::Default,
+        }
+    }
+    pub fn w_type(self) -> &'static str {
+        match self {
+            Self::Default => "default",
+            Self::First => "first",
+            Self::Even => "even",
+        }
+    }
+}
+
 impl EmitCtx {
     /// Create a new context whose first allocated rId will be
     /// `rId{start_rid}`. The packager reserves the static-parts
@@ -162,7 +197,9 @@ impl EmitCtx {
             heading_cursor: 0,
             captions: Vec::new(),
             headers: Vec::new(),
+            header_scopes: Vec::new(),
             footers: Vec::new(),
+            footer_scopes: Vec::new(),
             header_rids: Vec::new(),
             footer_rids: Vec::new(),
             footnotes: Vec::new(),

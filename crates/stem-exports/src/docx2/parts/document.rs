@@ -6,7 +6,7 @@
 
 use stem_core::ast::Document;
 
-use super::super::emit::ctx::EmitCtx;
+use super::super::emit::ctx::{EmitCtx, HeaderFooterScope};
 use super::super::emit::{paragraph, prepass};
 use super::super::xml::{Ns, XmlBuf};
 
@@ -42,6 +42,8 @@ pub fn body(doc: &Document, ctx: &mut EmitCtx) -> String {
     }
     let header_rids = ctx.header_rids.clone();
     let footer_rids = ctx.footer_rids.clone();
+    let header_scopes = ctx.header_scopes.clone();
+    let footer_scopes = ctx.footer_scopes.clone();
     let mut x = XmlBuf::new();
     x.xml_decl();
     x.elem_with_ns(
@@ -59,7 +61,13 @@ pub fn body(doc: &Document, ctx: &mut EmitCtx) -> String {
                 for block in &doc.blocks {
                     paragraph::render_block(block, ctx, x);
                 }
-                render_sect_pr_with_refs(x, &header_rids, &footer_rids);
+                render_sect_pr_with_refs(
+                    x,
+                    &header_rids,
+                    &header_scopes,
+                    &footer_rids,
+                    &footer_scopes,
+                );
             });
         },
     );
@@ -88,25 +96,32 @@ pub fn minimal() -> String {
 }
 
 fn render_sect_pr(x: &mut XmlBuf) {
-    render_sect_pr_with_refs(x, &[], &[]);
+    render_sect_pr_with_refs(x, &[], &[], &[], &[]);
 }
 
-fn render_sect_pr_with_refs(x: &mut XmlBuf, header_rids: &[String], footer_rids: &[String]) {
+fn render_sect_pr_with_refs(
+    x: &mut XmlBuf,
+    header_rids: &[String],
+    header_scopes: &[HeaderFooterScope],
+    footer_rids: &[String],
+    footer_scopes: &[HeaderFooterScope],
+) {
+    let has_first = header_scopes
+        .iter()
+        .chain(footer_scopes.iter())
+        .any(|s| matches!(s, HeaderFooterScope::First));
     x.elem("w:sectPr", &[], |x| {
-        // Header/footer references come BEFORE pgSz per the schema.
-        // For task 13 each registered header/footer becomes a
-        // "default" reference (applied to all pages); "first" and
-        // "even" variants stay out of scope.
-        for rid in header_rids {
+        // Header/footer references come before pgSz per the schema.
+        for (rid, scope) in header_rids.iter().zip(header_scopes.iter()) {
             x.empty(
                 "w:headerReference",
-                &[("w:type", "default"), ("r:id", rid.as_str())],
+                &[("w:type", scope.w_type()), ("r:id", rid.as_str())],
             );
         }
-        for rid in footer_rids {
+        for (rid, scope) in footer_rids.iter().zip(footer_scopes.iter()) {
             x.empty(
                 "w:footerReference",
-                &[("w:type", "default"), ("r:id", rid.as_str())],
+                &[("w:type", scope.w_type()), ("r:id", rid.as_str())],
             );
         }
         x.empty("w:pgSz", &[("w:w", "12240"), ("w:h", "15840")]);
@@ -122,5 +137,10 @@ fn render_sect_pr_with_refs(x: &mut XmlBuf, header_rids: &[String], footer_rids:
                 ("w:gutter", "0"),
             ],
         );
+        // When a first-page header or footer exists, `<w:titlePg/>`
+        // must be set so Word uses the "first" variant on page 1.
+        if has_first {
+            x.empty("w:titlePg", &[]);
+        }
     });
 }

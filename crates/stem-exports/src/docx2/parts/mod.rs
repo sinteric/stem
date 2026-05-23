@@ -189,7 +189,12 @@ fn pack(
     pkg.add_text("word/styles.xml", styles::styles());
     pkg.add_text("word/numbering.xml", numbering::numbering());
     pkg.add_text("word/theme/theme1.xml", theme::theme1());
-    pkg.add_text("word/settings.xml", settings::settings());
+    let has_even = ctx
+        .header_scopes
+        .iter()
+        .chain(ctx.footer_scopes.iter())
+        .any(|s| matches!(s, super::emit::ctx::HeaderFooterScope::Even));
+    pkg.add_text("word/settings.xml", settings::settings_with(has_even));
     pkg.add_text("word/webSettings.xml", web_settings::web_settings());
     pkg.add_text("word/fontTable.xml", font_table::font_table());
     pkg.add_text("docProps/core.xml", doc_props::core(&doc_props::now_w3cdtf()));

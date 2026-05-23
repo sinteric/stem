@@ -8,7 +8,7 @@
 
 use stem_core::ast::{Block, Body, Document, TextPiece};
 
-use super::ctx::{CaptionAnchor, CaptionKind, EmitCtx, HeadingAnchor};
+use super::ctx::{CaptionAnchor, CaptionKind, EmitCtx, HeaderFooterScope, HeadingAnchor};
 
 /// Populate `ctx.heading_anchors` and `ctx.captions` from `doc`.
 pub fn collect(doc: &Document, ctx: &mut EmitCtx) {
@@ -68,12 +68,24 @@ fn walk(blocks: &[Block], ctx: &mut EmitCtx, table_seq: &mut u32, figure_seq: &m
             // chrome shouldn't contribute to the TOC).
             "header" => {
                 if let Body::Children(children) = &b.body {
-                    ctx.headers.push(children.clone());
+                    let scope = HeaderFooterScope::from_prop(b.prop_str("scope"));
+                    // Skip duplicates of the same scope — only the
+                    // first one wins. (The source can have N
+                    // `header{}` blocks; Word allows at most one
+                    // per type per section.)
+                    if !ctx.header_scopes.contains(&scope) {
+                        ctx.headers.push(children.clone());
+                        ctx.header_scopes.push(scope);
+                    }
                 }
             }
             "footer" => {
                 if let Body::Children(children) = &b.body {
-                    ctx.footers.push(children.clone());
+                    let scope = HeaderFooterScope::from_prop(b.prop_str("scope"));
+                    if !ctx.footer_scopes.contains(&scope) {
+                        ctx.footers.push(children.clone());
+                        ctx.footer_scopes.push(scope);
+                    }
                 }
             }
             _ => {
