@@ -1,4 +1,4 @@
-[page-size:letter, margin:1in]
+[page-size:letter, margin:1in, header:0.49in, footer:0.49in]
 
 
 header[scope:even]{ p() }
@@ -6,7 +6,7 @@ header{ p() }
 header[scope:first]{ p() }
 footer[scope:even]{ p() }
 footer{
-  p[border-top:true, tabs:"center,right", after:0pt, line:1.0x, size:9pt](Google Inc. 2018@tab()Version 1.7@tab()Page @page-number() of @total-pages())
+  p[border-top:true, tabs:"center,right", before:2.9pt, after:0pt, line:1.0x, size:9pt](Google Inc. 2018@tab()Version 1.7@tab()Page @page-number() of @total-pages())
   p[align:center, after:0pt, line:1.0x, size:9pt](Public Material – May be reproduced only in its original entirety \(without revision\).)
 }
 footer[scope:first]{ p() }
@@ -44,7 +44,7 @@ p()
 p()
 p()
 p()
-image[src:"references/docx/.extracted/boringcrypto_extract/assets/image_rId8.png", alt:"figure", w:6.50in, h:1.22in]
+image[src:"references/docx/.extracted/boringcrypto_extract/assets/image_rId8.png", alt:"figure", w:6.50in, h:1.22in, after:0pt]
 
 pagebreak
 

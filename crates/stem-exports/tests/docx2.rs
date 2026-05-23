@@ -399,6 +399,63 @@ fn read_entry_bytes(bytes: &[u8], path: &str) -> Vec<u8> {
 }
 
 #[test]
+fn page_geometry_comes_from_metadata() {
+    let bytes = export_stem(
+        r#"[page-size:letter, margin:0.75in, header:0.4in, footer:0.4in]
+p(hello)"#,
+    );
+    let doc = read_entry(&bytes, "word/document.xml");
+    // 0.75in = 1080 dxa; 0.4in = 576 dxa.
+    assert!(
+        doc.contains(r#"<w:pgMar w:top="1080" w:right="1080" w:bottom="1080" w:left="1080" w:header="576" w:footer="576" w:gutter="0"/>"#),
+        "pgMar didn't pick up metadata: {doc}"
+    );
+    // Letter dimensions still in pgSz.
+    assert!(doc.contains(r#"<w:pgSz w:w="12240" w:h="15840"/>"#));
+}
+
+#[test]
+fn page_size_a4_resolves_to_dxa_dimensions() {
+    let bytes = export_stem(r#"[page-size:a4]
+p(hi)"#);
+    let doc = read_entry(&bytes, "word/document.xml");
+    assert!(doc.contains(r#"<w:pgSz w:w="11906" w:h="16838"/>"#));
+}
+
+#[test]
+fn image_paragraph_after_property_collapses_inter_paragraph_gap() {
+    let tmp = std::env::temp_dir().join(format!(
+        "docx2_img_{}_{}.png",
+        std::process::id(),
+        std::time::SystemTime::now()
+            .duration_since(std::time::UNIX_EPOCH)
+            .map(|d| d.as_nanos() as u64)
+            .unwrap_or(0)
+    ));
+    let png: &[u8] = &[
+        0x89, 0x50, 0x4E, 0x47, 0x0D, 0x0A, 0x1A, 0x0A, 0x00, 0x00, 0x00, 0x0D, 0x49, 0x48, 0x44,
+        0x52, 0x00, 0x00, 0x00, 0x01, 0x00, 0x00, 0x00, 0x01, 0x08, 0x06, 0x00, 0x00, 0x00, 0x1F,
+        0x15, 0xC4, 0x89, 0x00, 0x00, 0x00, 0x0D, 0x49, 0x44, 0x41, 0x54, 0x78, 0x9C, 0x63, 0x00,
+        0x01, 0x00, 0x00, 0x05, 0x00, 0x01, 0x0D, 0x0A, 0x2D, 0xB4, 0x00, 0x00, 0x00, 0x00, 0x49,
+        0x45, 0x4E, 0x44, 0xAE, 0x42, 0x60, 0x82,
+    ];
+    std::fs::write(&tmp, png).expect("write");
+    let src = format!(
+        r#"image[src:"{}", w:"1in", h:"1in", after:0pt]"#,
+        tmp.display()
+    );
+    let bytes = export_stem(&src);
+    let _ = std::fs::remove_file(&tmp);
+    let doc = read_entry(&bytes, "word/document.xml");
+    // The image paragraph emits its pPr with the spacing override.
+    assert!(
+        doc.contains(r#"<w:spacing w:after="0"/>"#)
+            || doc.contains(r#"<w:spacing w:after="0" "#),
+        "expected zero after-spacing on image paragraph: {doc}"
+    );
+}
+
+#[test]
 fn boringcrypto_renders_all_tables() {
     let path = "../../examples/paper_boringcrypto.stem";
     let Ok(src) = std::fs::read_to_string(path) else {

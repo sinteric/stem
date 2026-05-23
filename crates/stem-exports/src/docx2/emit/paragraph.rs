@@ -254,12 +254,35 @@ fn render_paragraph(b: &Block, ctx: &mut EmitCtx, x: &mut XmlBuf) {
 /// A line-height value parsed from a paragraph's `line:` property.
 /// Either an explicit point value (`line:18pt`) or a multiplier
 /// (`line:1.5x`, treated as multiple-line spacing).
-enum LineHeight {
+pub enum LineHeight {
     /// Exact dxa value with `lineRule="auto"` (or "exact" for
     /// negative values per Word's convention — we always use auto).
     Auto(u32),
     /// Multiple of single line height, dxa = N * 240.
     Multiple(u32),
+}
+
+/// Reusable shim — other emit modules call this to parse the
+/// `line:` property in the same way `p` and `title` do.
+pub fn parse_line(s: &str) -> Option<LineHeight> {
+    parse_line_height(s)
+}
+
+/// Reusable shim — drawing emit shares the `before:`/`after:`
+/// dxa parsing.
+pub fn parse_dxa(s: &str) -> Option<u32> {
+    parse_length_to_dxa(s)
+}
+
+/// Public emit_spacing for use by other emit modules. Takes the
+/// same parsed values as the internal call site.
+pub fn emit_spacing_pub(
+    x: &mut XmlBuf,
+    before: Option<u32>,
+    after: Option<u32>,
+    line: Option<LineHeight>,
+) {
+    emit_spacing(x, before, after, line);
 }
 
 fn parse_line_height(s: &str) -> Option<LineHeight> {

@@ -63,7 +63,20 @@ pub fn render_image(b: &Block, ctx: &mut EmitCtx, x: &mut XmlBuf) {
     let alt = b.prop_str("alt").unwrap_or("Image");
 
     let float_mode = b.prop_str("float").unwrap_or("inline");
+    // Image paragraphs honor the same spacing primitives as `p`:
+    // `[before:..]`, `[after:..]`, `[line:..]` go through to the
+    // wrapping `<w:p>`'s pPr. Useful for clamping vertical space
+    // between the image and a following pagebreak (set `after:0pt`).
+    let before = b.prop_str("before").and_then(super::paragraph::parse_dxa);
+    let after = b.prop_str("after").and_then(super::paragraph::parse_dxa);
+    let line = b.prop_str("line").and_then(super::paragraph::parse_line);
+    let has_spacing = before.is_some() || after.is_some() || line.is_some();
     x.elem("w:p", &[], |x| {
+        if has_spacing {
+            x.elem("w:pPr", &[], |x| {
+                super::paragraph::emit_spacing_pub(x, before, after, line);
+            });
+        }
         x.elem("w:r", &[], |x| {
             x.elem("w:drawing", &[], |x| {
                 match float_mode {
