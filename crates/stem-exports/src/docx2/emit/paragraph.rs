@@ -60,23 +60,21 @@ fn render_children(b: &Block, ctx: &mut EmitCtx, x: &mut XmlBuf) {
 }
 
 fn render_title(b: &Block, ctx: &mut EmitCtx, x: &mut XmlBuf) {
-    let align = b.prop_str("align").unwrap_or("center");
+    // Default to center alignment when no `align:` is specified —
+    // titles are cover-page material that wants centering by
+    // default. Body authors can override per-block.
+    let align_default = b.prop_str("align").unwrap_or("center");
     let size_hp = b.prop_str("size").and_then(parse_length_to_half_points);
+    let before = b.prop_str("before").and_then(parse_length_to_dxa);
+    let after = b.prop_str("after").and_then(parse_length_to_dxa);
+    let line = b.prop_str("line").and_then(parse_line_height);
     x.elem("w:p", &[], |x| {
         x.elem("w:pPr", &[], |x| {
             x.empty("w:pStyle", &[("w:val", "Title")]);
-            // Tighter title spacing than the body default — 6pt
-            // after, single-line height, matching the reference
-            // BoringCrypto cover.
-            x.empty(
-                "w:spacing",
-                &[
-                    ("w:after", "120"),
-                    ("w:line", "240"),
-                    ("w:lineRule", "auto"),
-                ],
-            );
-            x.empty("w:jc", &[("w:val", normalize_jc(align))]);
+            if before.is_some() || after.is_some() || line.is_some() {
+                emit_spacing(x, before, after, line);
+            }
+            x.empty("w:jc", &[("w:val", normalize_jc(align_default))]);
             // Paragraph-mark rPr override — needed so the trailing
             // pilcrow renders at the requested size too.
             if let Some(sz) = size_hp {
