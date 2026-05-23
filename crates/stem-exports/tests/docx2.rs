@@ -319,6 +319,70 @@ fn example_boringcrypto_renders_structurally() {
 }
 
 #[test]
+fn embedded_image_lands_in_media_and_rels() {
+    // Mint a 1×1 PNG on disk and reference it from a stem source.
+    let tmp = std::env::temp_dir().join(format!(
+        "docx2_img_{}_{}.png",
+        std::process::id(),
+        std::time::SystemTime::now()
+            .duration_since(std::time::UNIX_EPOCH)
+            .map(|d| d.subsec_nanos())
+            .unwrap_or(0)
+    ));
+    let png: &[u8] = &[
+        0x89, 0x50, 0x4E, 0x47, 0x0D, 0x0A, 0x1A, 0x0A, 0x00, 0x00, 0x00, 0x0D, 0x49, 0x48, 0x44,
+        0x52, 0x00, 0x00, 0x00, 0x01, 0x00, 0x00, 0x00, 0x01, 0x08, 0x06, 0x00, 0x00, 0x00, 0x1F,
+        0x15, 0xC4, 0x89, 0x00, 0x00, 0x00, 0x0D, 0x49, 0x44, 0x41, 0x54, 0x78, 0x9C, 0x63, 0x00,
+        0x01, 0x00, 0x00, 0x05, 0x00, 0x01, 0x0D, 0x0A, 0x2D, 0xB4, 0x00, 0x00, 0x00, 0x00, 0x49,
+        0x45, 0x4E, 0x44, 0xAE, 0x42, 0x60, 0x82,
+    ];
+    std::fs::write(&tmp, png).expect("write png");
+    let src = format!(
+        r#"p(before)
+image[src:"{}", w:"1in", h:"1in"]
+p(after)
+"#,
+        tmp.display()
+    );
+
+    let bytes = export_stem(&src);
+    let _ = std::fs::remove_file(&tmp);
+
+    // word/media/image1.png must exist and equal the bytes we wrote.
+    let media = read_entry_bytes(&bytes, "word/media/image1.png");
+    assert_eq!(media, png);
+
+    // document.xml.rels must link rId7 (first body-allocated rId
+    // after the 6 static parts) to the image.
+    let doc_rels = read_entry(&bytes, "word/_rels/document.xml.rels");
+    assert!(doc_rels.contains(r#"Id="rId7""#));
+    assert!(doc_rels.contains(r#"Target="media/image1.png""#));
+    assert!(doc_rels.contains("relationships/image"));
+
+    // Content_Types must declare image/png as a Default for the
+    // png extension.
+    let ct = read_entry(&bytes, "[Content_Types].xml");
+    assert!(
+        ct.contains(r#"Extension="png""#) && ct.contains(r#"ContentType="image/png""#),
+        "Content_Types missing png default: {ct}"
+    );
+
+    // The body must reference the image via <w:drawing> + r:embed.
+    let doc = read_entry(&bytes, "word/document.xml");
+    assert!(doc.contains("<w:drawing>"));
+    assert!(doc.contains(r#"r:embed="rId7""#));
+    assert!(doc.contains("<wp:inline"));
+}
+
+fn read_entry_bytes(bytes: &[u8], path: &str) -> Vec<u8> {
+    let mut zip = zip::ZipArchive::new(std::io::Cursor::new(bytes)).expect("zip");
+    let mut entry = zip.by_name(path).unwrap_or_else(|_| panic!("missing {path}"));
+    let mut out = Vec::new();
+    std::io::copy(&mut entry, &mut out).expect("read");
+    out
+}
+
+#[test]
 fn boringcrypto_renders_all_tables() {
     let path = "../../examples/paper_boringcrypto.stem";
     let Ok(src) = std::fs::read_to_string(path) else {

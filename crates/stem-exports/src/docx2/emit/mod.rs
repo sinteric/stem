@@ -12,6 +12,8 @@
 //! field. Each is a sibling module so the body emission stays
 //! linear and grep-friendly.
 
+pub mod ctx;
+pub mod drawing;
 pub mod paragraph;
 pub mod run;
 pub mod table;

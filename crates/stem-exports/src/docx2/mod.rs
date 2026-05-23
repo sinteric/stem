@@ -72,6 +72,6 @@ impl Exporter for DocxV2Exporter {
     type Error = DocxV2Error;
     fn export(&self, doc: &Document, _theme: &Theme) -> Result<Vec<u8>, DocxV2Error> {
         let cooked = stem_parser::cook_document(doc);
-        parts::package_doc(&cooked)
+        parts::package_doc(&cooked, self.image_base.as_deref())
     }
 }

@@ -10,11 +10,12 @@ use stem_core::ast::{Block, Body};
 
 use super::super::parts::numbering::NUM_ID_HEADING;
 use super::super::xml::XmlBuf;
-use super::{run, table};
+use super::ctx::EmitCtx;
+use super::{drawing, run, table};
 
 /// Emit OOXML for one top-level block into `x`. Recurses into
 /// container blocks (`section`, `header`, `footer`).
-pub fn render_block(b: &Block, x: &mut XmlBuf) {
+pub fn render_block(b: &Block, ctx: &mut EmitCtx, x: &mut XmlBuf) {
     match b.name.as_str() {
         "title" => render_title(b, x),
         "h1" => render_heading(b, 1, x),
@@ -27,11 +28,12 @@ pub fn render_block(b: &Block, x: &mut XmlBuf) {
         "blockquote" => render_blockquote(b, x),
         "pagebreak" => render_pagebreak(x),
         "table" => table::render_table(b, x),
+        "image" => drawing::render_image(b, ctx, x),
         // Container-shaped blocks — recurse into their child blocks
         // so nested paragraphs land at the body level. Task 6 does
         // not emit section/header/footer-specific wrappers; those
         // arrive in tasks 11+ (sections) and 13 (header/footer).
-        "section" => render_children(b, x),
+        "section" => render_children(b, ctx, x),
         // Anything else not yet handled: emit as a plain paragraph
         // carrying the block's text. Keeps the output structurally
         // complete while later tasks (7-14) take over each block
@@ -41,10 +43,10 @@ pub fn render_block(b: &Block, x: &mut XmlBuf) {
 }
 
 /// Walk children only — used for section etc.
-fn render_children(b: &Block, x: &mut XmlBuf) {
+fn render_children(b: &Block, ctx: &mut EmitCtx, x: &mut XmlBuf) {
     if let Body::Children(children) = &b.body {
         for child in children {
-            render_block(child, x);
+            render_block(child, ctx, x);
         }
     }
 }
@@ -139,9 +141,10 @@ mod tests {
 
     fn render(src: &str) -> String {
         let r = parse(src);
+        let mut ctx = EmitCtx::new(None, 1);
         let mut x = XmlBuf::new();
         for b in &r.document.blocks {
-            render_block(b, &mut x);
+            render_block(b, &mut ctx, &mut x);
         }
         x.finish()
     }

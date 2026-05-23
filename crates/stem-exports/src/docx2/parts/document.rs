@@ -6,26 +6,42 @@
 
 use stem_core::ast::Document;
 
+use super::super::emit::ctx::EmitCtx;
 use super::super::emit::paragraph;
 use super::super::xml::{Ns, XmlBuf};
 
 const NS_W: &str = "http://schemas.openxmlformats.org/wordprocessingml/2006/main";
 
-/// Document body for the cooked AST. Standard letter-size section
-/// properties land at the end; subsequent tasks may add header/
-/// footer references and per-section overrides via the `sectPr`
-/// builder.
-pub fn body(doc: &Document) -> String {
+// `w:document` needs more namespaces declared once embedded
+// drawings (`<w:drawing>` etc.) are referenced. We declare them
+// on the root element so individual elements don't need to
+// re-declare. Word ignores unused namespaces.
+const NS_R: &str = "http://schemas.openxmlformats.org/officeDocument/2006/relationships";
+const NS_WP: &str = "http://schemas.openxmlformats.org/drawingml/2006/wordprocessingDrawing";
+const NS_A: &str = "http://schemas.openxmlformats.org/drawingml/2006/main";
+const NS_PIC: &str = "http://schemas.openxmlformats.org/drawingml/2006/picture";
+
+/// Document body for the cooked AST. Walks the AST with the
+/// shared [`EmitCtx`] so embedded images, hyperlinks, and the
+/// other side-state needed by `document.xml.rels` accumulate
+/// during emission.
+pub fn body(doc: &Document, ctx: &mut EmitCtx) -> String {
     let mut x = XmlBuf::new();
     x.xml_decl();
     x.elem_with_ns(
         "w:document",
-        &[Ns { prefix: "w", uri: NS_W }],
+        &[
+            Ns { prefix: "w", uri: NS_W },
+            Ns { prefix: "r", uri: NS_R },
+            Ns { prefix: "wp", uri: NS_WP },
+            Ns { prefix: "a", uri: NS_A },
+            Ns { prefix: "pic", uri: NS_PIC },
+        ],
         &[],
         |x| {
             x.elem("w:body", &[], |x| {
                 for block in &doc.blocks {
-                    paragraph::render_block(block, x);
+                    paragraph::render_block(block, ctx, x);
                 }
                 render_sect_pr(x);
             });

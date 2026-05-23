@@ -26,6 +26,7 @@ pub fn builder() -> ContentTypes {
 
 #[derive(Default)]
 pub struct ContentTypes {
+    extra_defaults: Vec<(String, String)>,
     overrides: Vec<(String, String)>,
 }
 
@@ -37,6 +38,16 @@ impl ContentTypes {
     pub fn override_part(mut self, part_name: &str, content_type: &str) -> Self {
         self.overrides
             .push((part_name.to_string(), content_type.to_string()));
+        self
+    }
+
+    /// Add a `<Default Extension="…" ContentType="…"/>` entry —
+    /// used for image extensions (png/jpeg/gif/etc.) so Word can
+    /// dispatch any `word/media/imageN.<ext>` part to the right
+    /// decoder.
+    pub fn default_extension(mut self, ext: &str, content_type: &str) -> Self {
+        self.extra_defaults
+            .push((ext.to_string(), content_type.to_string()));
         self
     }
 
@@ -62,6 +73,12 @@ impl ContentTypes {
                 "Default",
                 &[("Extension", "xml"), ("ContentType", "application/xml")],
             );
+            for (ext, ct) in &self.extra_defaults {
+                x.empty(
+                    "Default",
+                    &[("Extension", ext.as_str()), ("ContentType", ct.as_str())],
+                );
+            }
             for (part, ct) in &self.overrides {
                 x.empty(
                     "Override",
