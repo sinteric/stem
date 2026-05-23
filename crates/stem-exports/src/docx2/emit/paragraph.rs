@@ -42,6 +42,9 @@ pub fn render_block(b: &Block, ctx: &mut EmitCtx, x: &mut XmlBuf) {
         // (headerN.xml / footerN.xml) by the packager — drop them
         // from the body walk.
         "header" | "footer" => {}
+        // Style override blocks are consumed by the prepass and
+        // patched into styles.xml; they emit nothing into the body.
+        "style" => {}
         // Anything else not yet handled: emit as a plain paragraph
         // carrying the block's text. Keeps the output structurally
         // complete while later tasks (7-14) take over each block

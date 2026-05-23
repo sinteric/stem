@@ -8,7 +8,9 @@
 
 use stem_core::ast::{Block, Body, Document, TextPiece};
 
-use super::ctx::{CaptionAnchor, CaptionKind, EmitCtx, HeaderFooterScope, HeadingAnchor};
+use super::ctx::{
+    CaptionAnchor, CaptionKind, EmitCtx, HeaderFooterScope, HeadingAnchor, StyleOverride,
+};
 
 /// Populate `ctx.heading_anchors` and `ctx.captions` from `doc`.
 pub fn collect(doc: &Document, ctx: &mut EmitCtx) {
@@ -66,6 +68,11 @@ fn walk(blocks: &[Block], ctx: &mut EmitCtx, table_seq: &mut u32, figure_seq: &m
             // into headerN.xml / footerN.xml) and do NOT recurse
             // into them for heading/caption collection (page
             // chrome shouldn't contribute to the TOC).
+            "style" => {
+                if let Some(id) = b.prop_str("id") {
+                    ctx.style_overrides.push(parse_style_override(id, b));
+                }
+            }
             "header" => {
                 if let Body::Children(children) = &b.body {
                     let scope = HeaderFooterScope::from_prop(b.prop_str("scope"));
@@ -122,6 +129,58 @@ fn has_visible_content(b: &Block) -> bool {
             TextPiece::Inline(_) => true,
         }),
         Body::Children(c) => c.iter().any(has_visible_content),
+    }
+}
+
+fn parse_style_override(id: &str, b: &Block) -> StyleOverride {
+    use super::super::emit::paragraph;
+    let mut o = StyleOverride {
+        id: id.to_string(),
+        ..Default::default()
+    };
+    // pPr fields
+    o.before_dxa = b.prop_str("before").and_then(paragraph::parse_dxa);
+    o.after_dxa = b.prop_str("after").and_then(paragraph::parse_dxa);
+    o.line_dxa = b.prop_str("line").and_then(paragraph::parse_line).map(line_to_dxa);
+    o.align = b.prop_str("align").map(str::to_string);
+    o.keep_next = bool_prop(b, "keep-next");
+    o.keep_lines = bool_prop(b, "keep-lines");
+    o.outline_lvl = b.prop_str("outline-lvl").and_then(|s| s.parse().ok());
+    o.contextual_spacing = bool_prop(b, "contextual-spacing");
+    o.border_top = bool_prop(b, "border-top");
+    // rPr fields
+    o.size_hp = b.prop_str("size").and_then(parse_size_to_half_points);
+    o.color = normalize_color(b.prop_str("color"));
+    o.bold = bool_prop(b, "bold");
+    o.italic = bool_prop(b, "italic");
+    o.strike = bool_prop(b, "strike");
+    o.underline = b.prop_str("underline").map(str::to_string);
+    o.font = b.prop_str("font").map(str::to_string);
+    o
+}
+
+fn bool_prop(b: &Block, key: &str) -> Option<bool> {
+    b.prop_str(key).map(|v| matches!(v, "true" | "yes" | "on"))
+}
+
+fn line_to_dxa(lh: super::super::emit::paragraph::LineHeight) -> u32 {
+    use super::super::emit::paragraph::LineHeight;
+    match lh {
+        LineHeight::Auto(n) | LineHeight::Multiple(n) => n,
+    }
+}
+
+fn parse_size_to_half_points(s: &str) -> Option<u32> {
+    // Reuse paragraph's parse — title/p use this for `size:`.
+    super::super::emit::paragraph::parse_dxa(s).map(|dxa| dxa / 10)
+}
+
+fn normalize_color(s: Option<&str>) -> Option<String> {
+    let s = s?.trim().trim_start_matches('#');
+    if s.len() == 6 && s.chars().all(|c| c.is_ascii_hexdigit()) {
+        Some(s.to_uppercase())
+    } else {
+        None
     }
 }
 

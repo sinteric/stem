@@ -399,6 +399,48 @@ fn read_entry_bytes(bytes: &[u8], path: &str) -> Vec<u8> {
 }
 
 #[test]
+fn style_override_patches_styles_xml() {
+    let bytes = export_stem(
+        r##"style[id:Heading1, color:"#C0392B", size:20pt, after:200pt]
+h1(Hello)"##,
+    );
+    let styles = read_entry(&bytes, "word/styles.xml");
+    // Walk to Heading1's style block and check the override values.
+    let h1_start = styles.find(r#"w:styleId="Heading1""#).unwrap();
+    let h1_end = styles[h1_start..].find("</w:style>").unwrap() + h1_start;
+    let block = &styles[h1_start..h1_end];
+
+    // Size override: 20pt = 40 half-points.
+    assert!(
+        block.contains(r#"<w:sz w:val="40"/>"#),
+        "expected size override 40 hp: {block}"
+    );
+    // Color override → C0392B uppercase.
+    assert!(
+        block.contains(r#"<w:color w:val="C0392B"/>"#),
+        "expected color override C0392B: {block}"
+    );
+    // After-spacing override: 200pt = 4000 dxa.
+    assert!(
+        block.contains(r#"w:after="4000""#),
+        "expected after=4000 dxa: {block}"
+    );
+}
+
+#[test]
+fn style_override_block_doesnt_emit_into_body() {
+    let bytes = export_stem(
+        r##"style[id:Title, color:"#00FF00"]
+h1(Body)"##,
+    );
+    let doc = read_entry(&bytes, "word/document.xml");
+    // No paragraph for the style block — only the heading.
+    let p_count = doc.matches("<w:p>").count() + doc.matches("<w:p ").count();
+    // 1 heading + the trailing sectPr placeholder (none here) → 1.
+    assert!(p_count <= 2, "style block leaked a paragraph: {doc}");
+}
+
+#[test]
 fn page_geometry_comes_from_metadata() {
     let bytes = export_stem(
         r#"[page-size:letter, margin:0.75in, header:0.4in, footer:0.4in]

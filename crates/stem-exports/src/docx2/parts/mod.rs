@@ -186,7 +186,10 @@ fn pack(
     pkg.add_text("_rels/.rels", root_rels);
     pkg.add_text("word/_rels/document.xml.rels", doc_rels_xml);
     pkg.add_text("word/document.xml", document_body_xml);
-    pkg.add_text("word/styles.xml", styles::styles());
+    pkg.add_text(
+        "word/styles.xml",
+        styles::styles_with_overrides(&ctx.style_overrides),
+    );
     pkg.add_text("word/numbering.xml", numbering::numbering());
     pkg.add_text("word/theme/theme1.xml", theme::theme1());
     let has_even = ctx

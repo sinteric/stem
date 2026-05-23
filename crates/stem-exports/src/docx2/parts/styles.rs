@@ -36,26 +36,26 @@ pub struct RPr {
     pub italic: bool,
     pub strike: bool,
     /// "auto" or 6-hex RGB ("0563C1").
-    pub color: Option<&'static str>,
+    pub color: Option<String>,
     /// Half-points.
     pub size_hp: Option<u32>,
     /// "single", "double", "none", ...
-    pub underline: Option<&'static str>,
+    pub underline: Option<String>,
     /// "superscript", "subscript", or None for baseline.
-    pub vert_align: Option<&'static str>,
+    pub vert_align: Option<String>,
 }
 
 #[derive(Default, Clone)]
 pub struct Fonts {
-    pub ascii: Option<&'static str>,
-    pub hi_ansi: Option<&'static str>,
+    pub ascii: Option<String>,
+    pub hi_ansi: Option<String>,
     /// Theme alias — e.g. "majorHAnsi" or "minorHAnsi". When set,
     /// overrides the literal `ascii`/`hi_ansi` if a reader resolves
     /// themes.
-    pub ascii_theme: Option<&'static str>,
-    pub h_ansi_theme: Option<&'static str>,
-    pub east_asia_theme: Option<&'static str>,
-    pub cs_theme: Option<&'static str>,
+    pub ascii_theme: Option<String>,
+    pub h_ansi_theme: Option<String>,
+    pub east_asia_theme: Option<String>,
+    pub cs_theme: Option<String>,
 }
 
 /// Paragraph properties — block-level formatting. Used inside a
@@ -71,12 +71,15 @@ pub struct PPr {
     /// in twentieths of a point.
     pub ind: Option<Indent>,
     /// "left", "center", "right", "both".
-    pub jc: Option<&'static str>,
+    pub jc: Option<String>,
     /// 0..=8 for Heading1..Heading9.
     pub outline_lvl: Option<u32>,
     /// Contextual spacing — collapse "after" spacing when this and
     /// the next paragraph share a style. Used on ListParagraph.
     pub contextual_spacing: bool,
+    /// When true, the style's pPr will emit a single-line `<w:pBdr>`
+    /// with a top border. Set via `style[id:..., border-top:true]`.
+    pub border_top: bool,
 }
 
 #[derive(Default, Clone, Copy)]
@@ -214,6 +217,16 @@ impl Style {
         self
     }
 
+    /// Render this style, applying any matching source-supplied
+    /// override on top of the built-in defaults first.
+    pub fn render_with(
+        self,
+        x: &mut XmlBuf,
+        overrides: &[super::super::emit::ctx::StyleOverride],
+    ) {
+        apply_overrides(self, overrides).render(x);
+    }
+
     pub fn render(&self, x: &mut XmlBuf) {
         let mut attrs: Vec<(&str, &str)> = vec![("w:type", self.kind.attr())];
         if self.default {
@@ -275,6 +288,19 @@ fn render_p_pr(x: &mut XmlBuf, p: &PPr) {
         if p.keep_lines {
             x.empty("w:keepLines", &[]);
         }
+        if p.border_top {
+            x.elem("w:pBdr", &[], |x| {
+                x.empty(
+                    "w:top",
+                    &[
+                        ("w:val", "single"),
+                        ("w:sz", "4"),
+                        ("w:space", "1"),
+                        ("w:color", "auto"),
+                    ],
+                );
+            });
+        }
         if let Some(s) = p.spacing {
             let mut attrs: Vec<(&str, String)> = Vec::with_capacity(4);
             if let Some(v) = s.before {
@@ -307,8 +333,8 @@ fn render_p_pr(x: &mut XmlBuf, p: &PPr) {
         if p.contextual_spacing {
             x.empty("w:contextualSpacing", &[]);
         }
-        if let Some(j) = p.jc {
-            x.empty("w:jc", &[("w:val", j)]);
+        if let Some(j) = &p.jc {
+            x.empty("w:jc", &[("w:val", j.as_str())]);
         }
         if let Some(o) = p.outline_lvl {
             let s = o.to_string();
@@ -321,23 +347,23 @@ fn render_r_pr(x: &mut XmlBuf, r: &RPr) {
     x.elem("w:rPr", &[], |x| {
         if let Some(f) = &r.fonts {
             let mut attrs: Vec<(&str, &str)> = Vec::new();
-            if let Some(s) = f.ascii {
-                attrs.push(("w:ascii", s));
+            if let Some(s) = &f.ascii {
+                attrs.push(("w:ascii", s.as_str()));
             }
-            if let Some(s) = f.hi_ansi {
-                attrs.push(("w:hAnsi", s));
+            if let Some(s) = &f.hi_ansi {
+                attrs.push(("w:hAnsi", s.as_str()));
             }
-            if let Some(s) = f.ascii_theme {
-                attrs.push(("w:asciiTheme", s));
+            if let Some(s) = &f.ascii_theme {
+                attrs.push(("w:asciiTheme", s.as_str()));
             }
-            if let Some(s) = f.h_ansi_theme {
-                attrs.push(("w:hAnsiTheme", s));
+            if let Some(s) = &f.h_ansi_theme {
+                attrs.push(("w:hAnsiTheme", s.as_str()));
             }
-            if let Some(s) = f.east_asia_theme {
-                attrs.push(("w:eastAsiaTheme", s));
+            if let Some(s) = &f.east_asia_theme {
+                attrs.push(("w:eastAsiaTheme", s.as_str()));
             }
-            if let Some(s) = f.cs_theme {
-                attrs.push(("w:cstheme", s));
+            if let Some(s) = &f.cs_theme {
+                attrs.push(("w:cstheme", s.as_str()));
             }
             x.empty("w:rFonts", &attrs);
         }
@@ -352,19 +378,19 @@ fn render_r_pr(x: &mut XmlBuf, r: &RPr) {
         if r.strike {
             x.empty("w:strike", &[]);
         }
-        if let Some(c) = r.color {
-            x.empty("w:color", &[("w:val", c)]);
+        if let Some(c) = &r.color {
+            x.empty("w:color", &[("w:val", c.as_str())]);
         }
         if let Some(sz) = r.size_hp {
             let s = sz.to_string();
             x.empty("w:sz", &[("w:val", &s)]);
             x.empty("w:szCs", &[("w:val", &s)]);
         }
-        if let Some(u) = r.underline {
-            x.empty("w:u", &[("w:val", u)]);
+        if let Some(u) = &r.underline {
+            x.empty("w:u", &[("w:val", u.as_str())]);
         }
-        if let Some(v) = r.vert_align {
-            x.empty("w:vertAlign", &[("w:val", v)]);
+        if let Some(v) = &r.vert_align {
+            x.empty("w:vertAlign", &[("w:val", v.as_str())]);
         }
     });
 }
@@ -380,6 +406,12 @@ fn render_r_pr(x: &mut XmlBuf, r: &RPr) {
 ///                FootnoteReference, TOC1..9, TOCHeading,
 ///                TableofFigures, ListParagraph
 pub fn styles() -> String {
+    styles_with_overrides(&[])
+}
+
+pub fn styles_with_overrides(
+    overrides: &[super::super::emit::ctx::StyleOverride],
+) -> String {
     let mut x = XmlBuf::new();
     x.xml_decl();
     x.elem("w:styles", &[("xmlns:w", NS_W)], |x| {
@@ -453,7 +485,7 @@ pub fn styles() -> String {
             },
         );
 
-        render_real_styles(x);
+        render_real_styles(x, overrides);
     });
     x.finish()
 }
@@ -476,27 +508,105 @@ fn latent_uipri(x: &mut XmlBuf, name: &str, priority: u32) {
     );
 }
 
-fn render_real_styles(x: &mut XmlBuf) {
+fn apply_overrides(style: Style, overrides: &[super::super::emit::ctx::StyleOverride]) -> Style {
+    let mut s = style;
+    let Some(o) = overrides.iter().find(|o| o.id == s.id) else {
+        return s;
+    };
+    // Build pPr/rPr if missing so we can patch.
+    let mut p = s.p_pr.take().unwrap_or_default();
+    let mut r = s.r_pr.take().unwrap_or_default();
+    // pPr overrides
+    let mut spacing = p.spacing.unwrap_or_default();
+    let mut p_touched = false;
+    if let Some(v) = o.before_dxa {
+        spacing.before = Some(v);
+        p_touched = true;
+    }
+    if let Some(v) = o.after_dxa {
+        spacing.after = Some(v);
+        p_touched = true;
+    }
+    if let Some(v) = o.line_dxa {
+        spacing.line = Some(v);
+        p_touched = true;
+    }
+    if p_touched {
+        p.spacing = Some(spacing);
+    }
+    if let Some(v) = &o.align {
+        p.jc = Some(v.clone());
+    }
+    if let Some(v) = o.keep_next {
+        p.keep_next = v;
+    }
+    if let Some(v) = o.keep_lines {
+        p.keep_lines = v;
+    }
+    if let Some(v) = o.outline_lvl {
+        p.outline_lvl = Some(v);
+    }
+    if let Some(v) = o.contextual_spacing {
+        p.contextual_spacing = v;
+    }
+    if let Some(v) = o.border_top {
+        p.border_top = v;
+    }
+    s.p_pr = Some(p);
+    // rPr overrides
+    if let Some(v) = o.size_hp {
+        r.size_hp = Some(v);
+    }
+    if let Some(v) = &o.color {
+        r.color = Some(v.clone());
+    }
+    if let Some(v) = o.bold {
+        r.bold = v;
+    }
+    if let Some(v) = o.italic {
+        r.italic = v;
+    }
+    if let Some(v) = o.strike {
+        r.strike = v;
+    }
+    if let Some(v) = &o.underline {
+        r.underline = Some(v.clone());
+    }
+    if let Some(v) = &o.font {
+        // Setting `font:` clears any theme alias and forces ascii/hAnsi
+        // to the literal family name — matches Word's behavior when
+        // you change a style's font from a theme to a specific face.
+        r.fonts = Some(Fonts {
+            ascii: Some(v.clone()),
+            hi_ansi: Some(v.clone()),
+            ..Default::default()
+        });
+    }
+    s.r_pr = Some(r);
+    s
+}
+
+fn render_real_styles(x: &mut XmlBuf, overrides: &[super::super::emit::ctx::StyleOverride]) {
     // Word's three built-in defaults that every docx needs.
-    Style::paragraph("Normal", "Normal").default().q_format().render(x);
+    Style::paragraph("Normal", "Normal").default().q_format().render_with(x, overrides);
     Style::character("DefaultParagraphFont", "Default Paragraph Font")
         .default()
         .ui_priority(1)
         .semi_hidden()
         .unhide_when_used()
-        .render(x);
+        .render_with(x, overrides);
     Style::table("TableNormal", "Normal Table")
         .default()
         .ui_priority(99)
         .semi_hidden()
         .unhide_when_used()
-        .render(x);
+        .render_with(x, overrides);
     Style::numbering("NoList", "No List")
         .default()
         .ui_priority(99)
         .semi_hidden()
         .unhide_when_used()
-        .render(x);
+        .render_with(x, overrides);
 
     // Heading1..6 — color 2E74B5 (Word's standard accent1 heading
     // blue), Calibri Light via majorHAnsi theme, sizes from the
@@ -518,13 +628,13 @@ fn render_real_styles(x: &mut XmlBuf) {
         };
         let r_pr = RPr {
             fonts: Some(Fonts {
-                ascii_theme: Some("majorHAnsi"),
-                h_ansi_theme: Some("majorHAnsi"),
-                east_asia_theme: Some("majorEastAsia"),
-                cs_theme: Some("majorBidi"),
+                ascii_theme: Some("majorHAnsi".into()),
+                h_ansi_theme: Some("majorHAnsi".into()),
+                east_asia_theme: Some("majorEastAsia".into()),
+                cs_theme: Some("majorBidi".into()),
                 ..Default::default()
             }),
-            color: Some("2E74B5"),
+            color: Some("2E74B5".into()),
             size_hp: Some(HEADING_SIZES_HP[(level - 1) as usize]),
             ..Default::default()
         };
@@ -535,7 +645,7 @@ fn render_real_styles(x: &mut XmlBuf) {
             .q_format()
             .p_pr(p_pr)
             .r_pr(r_pr)
-            .render(x);
+            .render_with(x, overrides);
     }
 
     // Title — cover page heading. 18pt bold, no theme color.
@@ -549,7 +659,7 @@ fn render_real_styles(x: &mut XmlBuf) {
             size_hp: Some(36),
             ..Default::default()
         })
-        .render(x);
+        .render_with(x, overrides);
 
     // Caption — figure/table captions.
     Style::paragraph("Caption", "caption")
@@ -561,21 +671,21 @@ fn render_real_styles(x: &mut XmlBuf) {
         .q_format()
         .r_pr(RPr {
             italic: true,
-            color: Some("44546A"),
+            color: Some("44546A".into()),
             size_hp: Some(18),
             ..Default::default()
         })
-        .render(x);
+        .render_with(x, overrides);
 
     // Hyperlink — blue + underlined character style.
     Style::character("Hyperlink", "Hyperlink")
         .ui_priority(99)
         .r_pr(RPr {
-            color: Some("0563C1"),
-            underline: Some("single"),
+            color: Some("0563C1".into()),
+            underline: Some("single".into()),
             ..Default::default()
         })
-        .render(x);
+        .render_with(x, overrides);
 
     // FootnoteReference — superscript marker character style.
     Style::character("FootnoteReference", "footnote reference")
@@ -583,10 +693,10 @@ fn render_real_styles(x: &mut XmlBuf) {
         .semi_hidden()
         .unhide_when_used()
         .r_pr(RPr {
-            vert_align: Some("superscript"),
+            vert_align: Some("superscript".into()),
             ..Default::default()
         })
-        .render(x);
+        .render_with(x, overrides);
 
     // TOC1..9 — left/hanging indents widen by 220 per level,
     // matching Word's built-in TOC styles.
@@ -612,7 +722,7 @@ fn render_real_styles(x: &mut XmlBuf) {
             .semi_hidden()
             .unhide_when_used()
             .p_pr(p_pr)
-            .render(x);
+            .render_with(x, overrides);
     }
 
     // TOCHeading — the visible "Table of Contents" label sitting
@@ -635,24 +745,24 @@ fn render_real_styles(x: &mut XmlBuf) {
             // Centered — matches the reference's "Contents Heading"
             // style. Per-paragraph TOC emission inherits this jc
             // rather than overriding it inline.
-            jc: Some("center"),
+            jc: Some("center".into()),
             // No outline_lvl on purpose — keeps TOCHeading out of
             // the TOC field's heading scan.
             ..Default::default()
         })
         .r_pr(RPr {
             fonts: Some(Fonts {
-                ascii_theme: Some("majorHAnsi"),
-                h_ansi_theme: Some("majorHAnsi"),
-                east_asia_theme: Some("majorEastAsia"),
-                cs_theme: Some("majorBidi"),
+                ascii_theme: Some("majorHAnsi".into()),
+                h_ansi_theme: Some("majorHAnsi".into()),
+                east_asia_theme: Some("majorEastAsia".into()),
+                cs_theme: Some("majorBidi".into()),
                 ..Default::default()
             }),
-            color: Some("2E74B5"),
+            color: Some("2E74B5".into()),
             size_hp: Some(32),
             ..Default::default()
         })
-        .render(x);
+        .render_with(x, overrides);
 
     // TableofFigures — caption-style entries in the LoT and LoF.
     Style::paragraph("TableofFigures", "table of figures")
@@ -661,7 +771,7 @@ fn render_real_styles(x: &mut XmlBuf) {
         .ui_priority(99)
         .semi_hidden()
         .unhide_when_used()
-        .render(x);
+        .render_with(x, overrides);
 
     // ListParagraph — used by ordered/unordered lists.
     // contextualSpacing collapses the after-spacing between
@@ -678,7 +788,7 @@ fn render_real_styles(x: &mut XmlBuf) {
             contextual_spacing: true,
             ..Default::default()
         })
-        .render(x);
+        .render_with(x, overrides);
 }
 
 #[cfg(test)]
@@ -751,13 +861,13 @@ mod tests {
         let xml = render(
             Style::character("X", "x").r_pr(RPr {
                 fonts: Some(Fonts {
-                    ascii: Some("Calibri"),
+                    ascii: Some("Calibri".into()),
                     ..Default::default()
                 }),
                 bold: true,
-                color: Some("000000"),
+                color: Some("000000".into()),
                 size_hp: Some(22),
-                underline: Some("single"),
+                underline: Some("single".into()),
                 ..Default::default()
             }),
         );

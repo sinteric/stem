@@ -103,6 +103,10 @@ pub struct EmitCtx {
     /// Next footnote id. Word reserves -1 (separator) and 0
     /// (continuation separator), so user notes start at 1.
     next_footnote_id: u32,
+    /// Source-supplied style overrides — populated by the prepass
+    /// from top-level `style[id:..., ...]` blocks and applied when
+    /// the styles part is rendered.
+    pub style_overrides: Vec<StyleOverride>,
 }
 
 /// One footnote — the `id` is referenced by both the
@@ -128,6 +132,34 @@ pub struct HeadingAnchor {
     pub level: u32,
     /// Visible text after inline elements are flattened.
     pub text: String,
+}
+
+/// One-style override patch from the source. Top-level
+/// `style[id:..., ...]` blocks become `StyleOverride` entries that
+/// patch the matching `<w:style>` in `word/styles.xml`. Every
+/// attribute is `Option`-wrapped so an unset field means "inherit
+/// the docx2 default for this style"; a set field replaces it.
+#[derive(Clone, Default)]
+pub struct StyleOverride {
+    pub id: String,
+    // pPr overrides
+    pub before_dxa: Option<u32>,
+    pub after_dxa: Option<u32>,
+    pub line_dxa: Option<u32>,
+    pub align: Option<String>,
+    pub keep_next: Option<bool>,
+    pub keep_lines: Option<bool>,
+    pub outline_lvl: Option<u32>,
+    pub contextual_spacing: Option<bool>,
+    pub border_top: Option<bool>,
+    // rPr overrides
+    pub size_hp: Option<u32>,
+    pub color: Option<String>,
+    pub bold: Option<bool>,
+    pub italic: Option<bool>,
+    pub strike: Option<bool>,
+    pub underline: Option<String>,
+    pub font: Option<String>,
 }
 
 /// Bookmark + display text for one caption (table or figure).
@@ -204,6 +236,7 @@ impl EmitCtx {
             footer_rids: Vec::new(),
             footnotes: Vec::new(),
             next_footnote_id: 1,
+            style_overrides: Vec::new(),
         }
     }
 
