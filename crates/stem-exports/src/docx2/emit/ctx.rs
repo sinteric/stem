@@ -99,9 +99,6 @@ pub struct EmitCtx {
     /// Next footnote id. Word reserves -1 (separator) and 0
     /// (continuation separator), so user notes start at 1.
     next_footnote_id: u32,
-    /// rId for the footnotes part — `None` if no footnotes were
-    /// emitted, in which case the part isn't written at all.
-    pub footnotes_rid: Option<String>,
 }
 
 /// One footnote — the `id` is referenced by both the
@@ -170,7 +167,6 @@ impl EmitCtx {
             footer_rids: Vec::new(),
             footnotes: Vec::new(),
             next_footnote_id: 1,
-            footnotes_rid: None,
         }
     }
 

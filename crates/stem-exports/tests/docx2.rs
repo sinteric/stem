@@ -352,10 +352,12 @@ p(after)
     let media = read_entry_bytes(&bytes, "word/media/image1.png");
     assert_eq!(media, png);
 
-    // document.xml.rels must link rId7 (first body-allocated rId
-    // after the 6 static parts) to the image.
+    // document.xml.rels must link rId9 (first body-allocated rId
+    // after the 8 static parts: styles, numbering, theme,
+    // settings, webSettings, fontTable, footnotes, endnotes) to
+    // the image.
     let doc_rels = read_entry(&bytes, "word/_rels/document.xml.rels");
-    assert!(doc_rels.contains(r#"Id="rId7""#));
+    assert!(doc_rels.contains(r#"Id="rId9""#));
     assert!(doc_rels.contains(r#"Target="media/image1.png""#));
     assert!(doc_rels.contains("relationships/image"));
 
@@ -370,7 +372,7 @@ p(after)
     // The body must reference the image via <w:drawing> + r:embed.
     let doc = read_entry(&bytes, "word/document.xml");
     assert!(doc.contains("<w:drawing>"));
-    assert!(doc.contains(r#"r:embed="rId7""#));
+    assert!(doc.contains(r#"r:embed="rId9""#));
     assert!(doc.contains("<wp:inline"));
 }
 
@@ -435,12 +437,23 @@ fn footnote_inline_lands_in_footnotes_part_and_body_ref() {
 }
 
 #[test]
-fn no_footnotes_means_no_footnotes_part() {
+fn footnotes_and_endnotes_parts_are_always_present() {
+    // Even when the source uses no `@footnote()` and no `@endnote()`,
+    // settings.xml names the placeholder ids -1 and 0 inside its
+    // `<w:footnotePr>` / `<w:endnotePr>` blocks. The corresponding
+    // parts must exist or Word reports a corrupted document.
     let bytes = export_stem(r#"p(plain paragraph)"#);
     let ct = read_entry(&bytes, "[Content_Types].xml");
-    assert!(!ct.contains("/word/footnotes.xml"));
+    assert!(ct.contains("/word/footnotes.xml"));
+    assert!(ct.contains("/word/endnotes.xml"));
     let doc_rels = read_entry(&bytes, "word/_rels/document.xml.rels");
-    assert!(!doc_rels.contains("footnotes.xml"));
+    assert!(doc_rels.contains(r#"Target="footnotes.xml""#));
+    assert!(doc_rels.contains(r#"Target="endnotes.xml""#));
+    // The parts themselves have the boilerplate separator entries.
+    let fn_xml = read_entry(&bytes, "word/footnotes.xml");
+    assert!(fn_xml.contains(r#"<w:footnote w:type="separator" w:id="-1">"#));
+    let en_xml = read_entry(&bytes, "word/endnotes.xml");
+    assert!(en_xml.contains(r#"<w:endnote w:type="separator" w:id="-1">"#));
 }
 
 #[test]
