@@ -560,12 +560,15 @@ mod tests {
 
     impl TempDir {
         fn new() -> Self {
+            use std::sync::atomic::{AtomicU32, Ordering};
+            static COUNTER: AtomicU32 = AtomicU32::new(0);
             let nanos = std::time::SystemTime::now()
                 .duration_since(std::time::UNIX_EPOCH)
-                .map(|d| d.subsec_nanos())
+                .map(|d| d.as_nanos() as u64)
                 .unwrap_or(0);
+            let n = COUNTER.fetch_add(1, Ordering::Relaxed);
             let pid = std::process::id();
-            let p = std::env::temp_dir().join(format!("docx2-test-{pid}-{nanos}"));
+            let p = std::env::temp_dir().join(format!("docx2-test-{pid}-{nanos}-{n}"));
             std::fs::create_dir_all(&p).unwrap();
             Self(p)
         }

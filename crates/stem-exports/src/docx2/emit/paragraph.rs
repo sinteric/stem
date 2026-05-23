@@ -162,13 +162,24 @@ fn render_heading(b: &Block, level: u32, ctx: &mut EmitCtx, x: &mut XmlBuf) {
 fn render_paragraph(b: &Block, ctx: &mut EmitCtx, x: &mut XmlBuf) {
     x.elem("w:p", &[], |x| {
         let visually_empty = is_visually_empty(b);
-        let tight = b.prop_str("tight") == Some("true");
+        let before = b.prop_str("before").and_then(parse_length_to_dxa);
+        let after = b.prop_str("after").and_then(parse_length_to_dxa);
+        let line = b.prop_str("line").and_then(parse_line_height);
         let border_top = b.prop_str("border-top") == Some("true");
         let tabs = b.prop_str("tabs");
         let align = b.prop_str("align").and_then(map_align);
-        let collapse_spacing = visually_empty || tight;
-        let needs_p_pr =
-            collapse_spacing || border_top || tabs.is_some() || align.is_some();
+
+        // Auto-collapse spacing on visually empty paragraphs unless
+        // the author has explicitly set their own spacing override.
+        let auto_collapse =
+            visually_empty && before.is_none() && after.is_none() && line.is_none();
+        let has_explicit_spacing = before.is_some() || after.is_some() || line.is_some();
+
+        let needs_p_pr = auto_collapse
+            || has_explicit_spacing
+            || border_top
+            || tabs.is_some()
+            || align.is_some();
         if needs_p_pr {
             x.elem("w:pPr", &[], |x| {
                 // pBdr → tabs → spacing → jc per schema order.
@@ -188,12 +199,14 @@ fn render_paragraph(b: &Block, ctx: &mut EmitCtx, x: &mut XmlBuf) {
                 if let Some(spec) = tabs {
                     render_tabs(x, spec);
                 }
-                if collapse_spacing {
-                    // Empty `p()` spacers and explicitly-tight
-                    // paragraphs collapse the 8pt-after / 1.08x
-                    // default to zero after / single line. Used by
-                    // the cover's stack of empty paragraphs and by
-                    // header/footer lines that need tight stacking.
+                if has_explicit_spacing {
+                    emit_spacing(x, before, after, line);
+                } else if auto_collapse {
+                    // Empty `p()` spacers collapse the 8pt-after /
+                    // 1.08x-line default to zero after / single
+                    // line. The cover's stack of empty paragraphs
+                    // depends on this — without it they'd push
+                    // content off the page.
                     x.empty(
                         "w:spacing",
                         &[
@@ -210,6 +223,83 @@ fn render_paragraph(b: &Block, ctx: &mut EmitCtx, x: &mut XmlBuf) {
         }
         run::render_body(b, ctx, x);
     });
+}
+
+/// A line-height value parsed from a paragraph's `line:` property.
+/// Either an explicit point value (`line:18pt`) or a multiplier
+/// (`line:1.5x`, treated as multiple-line spacing).
+enum LineHeight {
+    /// Exact dxa value with `lineRule="auto"` (or "exact" for
+    /// negative values per Word's convention — we always use auto).
+    Auto(u32),
+    /// Multiple of single line height, dxa = N * 240.
+    Multiple(u32),
+}
+
+fn parse_line_height(s: &str) -> Option<LineHeight> {
+    let s = s.trim();
+    if let Some(num) = s.strip_suffix('x') {
+        let mult: f64 = num.parse().ok()?;
+        if mult <= 0.0 {
+            return None;
+        }
+        return Some(LineHeight::Multiple((mult * 240.0).round() as u32));
+    }
+    parse_length_to_dxa(s).map(LineHeight::Auto)
+}
+
+fn emit_spacing(
+    x: &mut XmlBuf,
+    before: Option<u32>,
+    after: Option<u32>,
+    line: Option<LineHeight>,
+) {
+    let before_s = before.map(|v| v.to_string());
+    let after_s = after.map(|v| v.to_string());
+    let (line_val, line_rule) = match &line {
+        Some(LineHeight::Auto(n)) | Some(LineHeight::Multiple(n)) => {
+            (Some(n.to_string()), Some("auto"))
+        }
+        None => (None, None),
+    };
+    let mut attrs: Vec<(&str, &str)> = Vec::with_capacity(4);
+    if let Some(b) = &before_s {
+        attrs.push(("w:before", b.as_str()));
+    }
+    if let Some(a) = &after_s {
+        attrs.push(("w:after", a.as_str()));
+    }
+    if let Some(l) = &line_val {
+        attrs.push(("w:line", l.as_str()));
+    }
+    if let Some(r) = line_rule {
+        attrs.push(("w:lineRule", r));
+    }
+    x.empty("w:spacing", &attrs);
+}
+
+/// Length to twentieths of a point (Word's dxa unit). Accepts
+/// `Npt`, `Nin`, `Ncm`, `Nmm`, `Npx` (96dpi), bare number = pt.
+fn parse_length_to_dxa(s: &str) -> Option<u32> {
+    let s = s.trim();
+    if s.is_empty() {
+        return None;
+    }
+    let idx = s.find(|c: char| c.is_alphabetic()).unwrap_or(s.len());
+    let (num, unit) = s.split_at(idx);
+    let value: f64 = num.parse().ok()?;
+    let pts = match unit {
+        "" | "pt" => value,
+        "in" => value * 72.0,
+        "cm" => value * 28.3464566929,
+        "mm" => value * 2.83464566929,
+        "px" => value * 0.75, // 96dpi → 1px = 0.75pt
+        _ => return None,
+    };
+    if pts < 0.0 {
+        return None;
+    }
+    Some((pts * 20.0).round() as u32)
 }
 
 fn map_align(s: &str) -> Option<&'static str> {
@@ -410,12 +500,46 @@ mod tests {
     }
 
     #[test]
-    fn paragraph_with_tight_collapses_spacing() {
-        let s = render(r#"p[tight:true](hello)"#);
+    fn paragraph_after_0_emits_zero_after_spacing() {
+        let s = render(r#"p[after:0pt](hello)"#);
         assert!(
-            s.contains(r#"<w:spacing w:after="0" w:line="240" w:lineRule="auto"/>"#),
-            "expected tight spacing override: {s}"
+            s.contains(r#"<w:spacing w:after="0""#),
+            "expected w:after=0: {s}"
         );
+    }
+
+    #[test]
+    fn paragraph_before_and_after_emit_dxa_values() {
+        // 6pt = 120 dxa, 12pt = 240 dxa.
+        let s = render(r#"p[before:6pt, after:12pt](x)"#);
+        assert!(s.contains(r#"<w:spacing w:before="120" w:after="240"/>"#), "got: {s}");
+    }
+
+    #[test]
+    fn paragraph_line_multiplier_uses_single_line_base() {
+        // 1.5x of 240 (single line) = 360 dxa.
+        let s = render(r#"p[line:1.5x](x)"#);
+        assert!(
+            s.contains(r#"w:line="360" w:lineRule="auto""#),
+            "got: {s}"
+        );
+    }
+
+    #[test]
+    fn paragraph_line_explicit_pt_value() {
+        // 18pt = 360 dxa, auto rule.
+        let s = render(r#"p[line:18pt](x)"#);
+        assert!(s.contains(r#"w:line="360" w:lineRule="auto""#), "got: {s}");
+    }
+
+    #[test]
+    fn parse_length_to_dxa_handles_units() {
+        // 1pt = 20 dxa.
+        assert_eq!(parse_length_to_dxa("0"), Some(0));
+        assert_eq!(parse_length_to_dxa("1pt"), Some(20));
+        assert_eq!(parse_length_to_dxa("12"), Some(240));
+        assert_eq!(parse_length_to_dxa("1in"), Some(1440));
+        assert_eq!(parse_length_to_dxa("xyz"), None);
     }
 
     #[test]
