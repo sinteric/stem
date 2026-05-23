@@ -61,6 +61,7 @@ fn render_children(b: &Block, ctx: &mut EmitCtx, x: &mut XmlBuf) {
 
 fn render_title(b: &Block, ctx: &mut EmitCtx, x: &mut XmlBuf) {
     let align = b.prop_str("align").unwrap_or("center");
+    let size_hp = b.prop_str("size").and_then(parse_length_to_half_points);
     x.elem("w:p", &[], |x| {
         x.elem("w:pPr", &[], |x| {
             x.empty("w:pStyle", &[("w:val", "Title")]);
@@ -76,9 +77,51 @@ fn render_title(b: &Block, ctx: &mut EmitCtx, x: &mut XmlBuf) {
                 ],
             );
             x.empty("w:jc", &[("w:val", normalize_jc(align))]);
+            // Paragraph-mark rPr override — needed so the trailing
+            // pilcrow renders at the requested size too.
+            if let Some(sz) = size_hp {
+                let s = sz.to_string();
+                x.elem("w:rPr", &[], |x| {
+                    x.empty("w:sz", &[("w:val", &s)]);
+                    x.empty("w:szCs", &[("w:val", &s)]);
+                });
+            }
         });
-        run::render_body(b, ctx, x);
+        // Per-run size override when `[size:..]` is set on the title.
+        let base = if let Some(sz) = size_hp {
+            run::RPr {
+                size_hp: Some(sz),
+                ..Default::default()
+            }
+        } else {
+            run::RPr::default()
+        };
+        run::render_body_with(b, ctx, x, &base);
     });
+}
+
+/// Convert a length string to half-points (Word's font size unit).
+/// Accepts `12pt`, `1in`, `2.54cm`, `25mm`, bare number (treated as
+/// points). Returns `None` for unrecognized units or negatives.
+fn parse_length_to_half_points(s: &str) -> Option<u32> {
+    let s = s.trim();
+    if s.is_empty() {
+        return None;
+    }
+    let idx = s.find(|c: char| c.is_alphabetic()).unwrap_or(s.len());
+    let (num, unit) = s.split_at(idx);
+    let value: f64 = num.parse().ok()?;
+    let pts = match unit {
+        "" | "pt" => value,
+        "in" => value * 72.0,
+        "cm" => value * 28.3464566929,
+        "mm" => value * 2.83464566929,
+        _ => return None,
+    };
+    if pts < 0.0 {
+        return None;
+    }
+    Some((pts * 2.0).round() as u32)
 }
 
 fn render_heading(b: &Block, level: u32, ctx: &mut EmitCtx, x: &mut XmlBuf) {
@@ -209,6 +252,26 @@ mod tests {
         assert!(s.contains(r#"<w:pStyle w:val="Title"/>"#));
         assert!(s.contains(r#"<w:jc w:val="center"/>"#));
         assert!(s.contains("Hello world"));
+    }
+
+    #[test]
+    fn title_size_property_overrides_run_size() {
+        // 12pt = 24 half-points.
+        let s = render(r#"title[size:12pt](Smaller)"#);
+        assert!(
+            s.contains(r#"<w:sz w:val="24"/>"#),
+            "expected per-run size override 24 hp: {s}"
+        );
+        assert!(s.contains("Smaller"));
+    }
+
+    #[test]
+    fn parse_length_to_half_points_handles_units() {
+        assert_eq!(parse_length_to_half_points("12pt"), Some(24));
+        assert_eq!(parse_length_to_half_points("12"), Some(24));
+        assert_eq!(parse_length_to_half_points("1in"), Some(144));
+        assert_eq!(parse_length_to_half_points("2.54cm"), Some(144));
+        assert_eq!(parse_length_to_half_points("xyz"), None);
     }
 
     #[test]
