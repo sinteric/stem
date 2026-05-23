@@ -119,7 +119,7 @@ fn round_trip_to_html_is_clean() {
     let html = HtmlExporter::fragment()
         .export(&doc, &stem_core::theme::Theme::default())
         .expect("export");
-    assert!(html.contains("<h1>"), "missing <h1>: {}", html);
+    assert!(html.contains("<h1 "), "missing <h1>: {}", html);
     assert!(html.contains("Hello"));
     assert!(html.contains("<p>"));
     assert!(html.contains("font-style:italic"));

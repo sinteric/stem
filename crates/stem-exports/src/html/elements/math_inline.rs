@@ -12,11 +12,11 @@ use stem_core::ast::Block;
 use stem_core::theme::Theme;
 
 use super::super::{html_attr, BodyTextPieces};
-use super::HtmlElement;
+use super::HtmlInlineElement;
 use crate::math::to_mathml;
 use std::fmt::Write;
 
-pub const MATH: HtmlElement = HtmlElement {
+pub const MATH: HtmlInlineElement = HtmlInlineElement {
     name: "math",
     render,
 };

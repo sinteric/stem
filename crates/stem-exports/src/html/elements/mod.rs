@@ -3,8 +3,7 @@
 //! Each submodule owns the HTML rendering for one element. The
 //! [`INLINE_RENDERERS`] and [`BLOCK_RENDERERS`] consts collect them
 //! into dispatch tables consulted by [`super::render_inline`] and
-//! [`super::render_block`] before the legacy match arms (which are
-//! now empty for migrated elements).
+//! [`super::render_block`].
 //!
 //! Convention: per-element module is named after the element. Where one
 //! name spans an inline form AND a block form (e.g. `code`, `date`,
@@ -12,9 +11,28 @@
 //! the block form. For `cell`/`row` the block table_* prefix
 //! disambiguates the document-table form from the sheet form (which is
 //! rendered internally by `sheet`).
+//!
+//! ## Block vs inline signatures
+//!
+//! Block renderers take `&HtmlCtx` (which carries the theme along
+//! with per-document context like style overrides and heading/caption
+//! anchors). Inline renderers take just `&Theme` — inline elements
+//! don't reach into document-level state.
+//!
+//! Elements that need ctx access for their own logic (heading
+//! bookmarks, image/table caption numbering, TOC sections) are
+//! intercepted in [`super::render_block`] before dispatch and aren't
+//! listed in [`BLOCK_RENDERERS`]; their module-level fns live next
+//! to the rest of the renderers but expose a `render_with_ctx`
+//! entrypoint instead.
 
 use stem_core::ast::Block;
 use stem_core::theme::Theme;
+
+use super::ctx::HtmlCtx;
+
+// --- shared helpers ---
+pub mod block_props;
 
 // --- block ---
 pub mod blockquote;
@@ -40,50 +58,55 @@ pub mod table_row;
 pub mod title;
 
 // --- inline ---
+pub mod br;
 pub mod code_inline;
 pub mod date_inline;
 pub mod footnote;
 pub mod link;
 pub mod math_inline;
 pub mod mention;
+pub mod page_field;
+pub mod tab;
 pub mod text;
 
-/// Function-pointer signature for an element's HTML render.
-///
-/// Returns `std::fmt::Error` to match the existing render_inline /
-/// render_block chain; the top-level `HtmlExporter::export` wraps this
-/// in `HtmlError` at the boundary.
-pub type HtmlFn = fn(&mut String, &Block, &Theme) -> Result<(), std::fmt::Error>;
+/// Function-pointer signature for a block element's HTML render.
+pub type HtmlBlockFn = fn(&mut String, &Block, &HtmlCtx) -> Result<(), std::fmt::Error>;
+
+/// Function-pointer signature for an inline element's HTML render.
+pub type HtmlInlineFn = fn(&mut String, &Block, &Theme) -> Result<(), std::fmt::Error>;
 
 #[derive(Clone, Copy, Debug)]
-pub struct HtmlElement {
+pub struct HtmlBlockElement {
     pub name: &'static str,
-    pub render: HtmlFn,
+    pub render: HtmlBlockFn,
 }
 
-pub const INLINE_RENDERERS: &[&HtmlElement] = &[
+#[derive(Clone, Copy, Debug)]
+pub struct HtmlInlineElement {
+    pub name: &'static str,
+    pub render: HtmlInlineFn,
+}
+
+pub const INLINE_RENDERERS: &[&HtmlInlineElement] = &[
+    &br::BR,
     &code_inline::CODE,
     &date_inline::DATE,
     &footnote::FOOTNOTE,
     &link::LINK,
     &math_inline::MATH,
     &mention::MENTION,
+    &page_field::PAGE_NUMBER,
+    &page_field::TOTAL_PAGES,
+    &tab::TAB,
     &text::TEXT,
 ];
 
-pub const BLOCK_RENDERERS: &[&HtmlElement] = &[
+pub const BLOCK_RENDERERS: &[&HtmlBlockElement] = &[
     &blockquote::BLOCKQUOTE,
     &code::CODE,
     &col::COL,
     &date_block::DATE,
-    &heading::H1,
-    &heading::H2,
-    &heading::H3,
-    &heading::H4,
-    &heading::H5,
-    &heading::H6,
     &hr::HR,
-    &image::IMAGE,
     &layout::LAYOUT,
     &list::OL,
     &list::UL,
@@ -93,22 +116,23 @@ pub const BLOCK_RENDERERS: &[&HtmlElement] = &[
     &note::NOTE,
     &pagebreak::PAGEBREAK,
     &paragraph::P,
-    &section::SECTION,
     &sheet::SHEET,
     &slide::SLIDE,
     &speaker_note::SPEAKER_NOTE,
-    &table::TABLE,
     &table_cell::CELL,
     &table_row::ROW,
     &title::TITLE,
 ];
 
 /// Look up an inline renderer by element name.
-pub fn lookup_inline(name: &str) -> Option<&'static HtmlElement> {
+pub fn lookup_inline(name: &str) -> Option<&'static HtmlInlineElement> {
     INLINE_RENDERERS.iter().copied().find(|e| e.name == name)
 }
 
-/// Look up a block renderer by element name.
-pub fn lookup_block(name: &str) -> Option<&'static HtmlElement> {
+/// Look up a block renderer by element name. Elements intercepted
+/// in [`super::render_block`] (`h1..h6`, `image`, `table`,
+/// `section`, `style`, `header`, `footer`) deliberately aren't in
+/// the table — the intercept handles them with full ctx access.
+pub fn lookup_block(name: &str) -> Option<&'static HtmlBlockElement> {
     BLOCK_RENDERERS.iter().copied().find(|e| e.name == name)
 }

@@ -4,10 +4,10 @@ use stem_core::ast::Block;
 use stem_core::theme::Theme;
 
 use super::super::{html_text, BodyTextPieces};
-use super::HtmlElement;
+use super::HtmlInlineElement;
 use std::fmt::Write;
 
-pub const MENTION: HtmlElement = HtmlElement {
+pub const MENTION: HtmlInlineElement = HtmlInlineElement {
     name: "mention",
     render,
 };

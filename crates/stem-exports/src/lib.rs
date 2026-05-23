@@ -23,6 +23,8 @@ pub mod math;
 pub mod markdown;
 #[cfg(feature = "pdf")]
 pub mod pdf;
+#[cfg(any(feature = "html", feature = "docx"))]
+pub mod style_props;
 #[cfg(feature = "xlsx")]
 pub mod xlsx;
 

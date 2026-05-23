@@ -1,18 +1,18 @@
 //! `layout` — multi-column or sidebar layout container.
 
 use stem_core::ast::Block;
-use stem_core::theme::Theme;
 
+use super::super::ctx::HtmlCtx;
 use super::super::{grid_template_for, html_attr, render_children_of};
-use super::HtmlElement;
+use super::HtmlBlockElement;
 use std::fmt::Write;
 
-pub const LAYOUT: HtmlElement = HtmlElement {
+pub const LAYOUT: HtmlBlockElement = HtmlBlockElement {
     name: "layout",
     render,
 };
 
-fn render(out: &mut String, b: &Block, theme: &Theme) -> Result<(), std::fmt::Error> {
+fn render(out: &mut String, b: &Block, ctx: &HtmlCtx) -> Result<(), std::fmt::Error> {
     let kind = b.prop_str("kind").unwrap_or("two-column");
     writeln!(
         out,
@@ -20,7 +20,7 @@ fn render(out: &mut String, b: &Block, theme: &Theme) -> Result<(), std::fmt::Er
         html_attr(kind),
         grid_template_for(kind),
     )?;
-    render_children_of(out, b, theme)?;
+    render_children_of(out, b, ctx)?;
     writeln!(out, "</div>")?;
     Ok(())
 }

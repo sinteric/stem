@@ -8,10 +8,10 @@ use stem_core::ast::Block;
 use stem_core::theme::Theme;
 
 use super::super::{html_attr, html_text, BodyTextPieces};
-use super::HtmlElement;
+use super::HtmlInlineElement;
 use std::fmt::Write;
 
-pub const LINK: HtmlElement = HtmlElement {
+pub const LINK: HtmlInlineElement = HtmlInlineElement {
     name: "link",
     render,
 };

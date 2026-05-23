@@ -4,10 +4,10 @@ use stem_core::ast::Block;
 use stem_core::theme::Theme;
 
 use super::super::{html_attr, BodyTextPieces};
-use super::HtmlElement;
+use super::HtmlInlineElement;
 use std::fmt::Write;
 
-pub const FOOTNOTE: HtmlElement = HtmlElement {
+pub const FOOTNOTE: HtmlInlineElement = HtmlInlineElement {
     name: "footnote",
     render,
 };

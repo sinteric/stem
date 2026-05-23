@@ -14,16 +14,18 @@ use std::fmt::Write;
 use stem_core::ast::{Block, Body, TextPiece};
 use stem_core::theme::Theme;
 
+use super::super::ctx::HtmlCtx;
 use super::super::{format_col_letter, html_attr, html_text, parse_cell_address};
-use super::HtmlElement;
+use super::HtmlBlockElement;
 use stem_types::formula;
 
-pub const SHEET: HtmlElement = HtmlElement {
+pub const SHEET: HtmlBlockElement = HtmlBlockElement {
     name: "sheet",
     render,
 };
 
-fn render(out: &mut String, b: &Block, theme: &Theme) -> Result<(), std::fmt::Error> {
+fn render(out: &mut String, b: &Block, ctx: &HtmlCtx) -> Result<(), std::fmt::Error> {
+    let theme = ctx.theme;
     let name = b
         .prop_str("name")
         .unwrap_or_else(|| b.prop_str("id").unwrap_or(""));

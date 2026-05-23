@@ -1,18 +1,19 @@
 //! `slide` — a presentation slide.
 
 use stem_core::ast::Block;
-use stem_core::theme::Theme;
 
+use super::super::ctx::HtmlCtx;
 use super::super::{html_attr, render_children_of};
-use super::HtmlElement;
+use super::HtmlBlockElement;
 use std::fmt::Write;
 
-pub const SLIDE: HtmlElement = HtmlElement {
+pub const SLIDE: HtmlBlockElement = HtmlBlockElement {
     name: "slide",
     render,
 };
 
-fn render(out: &mut String, b: &Block, theme: &Theme) -> Result<(), std::fmt::Error> {
+fn render(out: &mut String, b: &Block, ctx: &HtmlCtx) -> Result<(), std::fmt::Error> {
+    let theme = ctx.theme;
     let mut style = String::from(
         "page-break-after:always;min-height:5in;padding:1rem;border:1px dashed #aaa;\
          margin-bottom:1rem;",
@@ -31,7 +32,7 @@ fn render(out: &mut String, b: &Block, theme: &Theme) -> Result<(), std::fmt::Er
         html_attr(layout),
         style,
     )?;
-    render_children_of(out, b, theme)?;
+    render_children_of(out, b, ctx)?;
     writeln!(out, "</section>")?;
     Ok(())
 }

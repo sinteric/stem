@@ -1,18 +1,18 @@
 //! `speaker-note` — hidden presenter notes for slides.
 
 use stem_core::ast::{Block, Body, TextPiece};
-use stem_core::theme::Theme;
 
+use super::super::ctx::HtmlCtx;
 use super::super::html_text;
-use super::HtmlElement;
+use super::HtmlBlockElement;
 use std::fmt::Write;
 
-pub const SPEAKER_NOTE: HtmlElement = HtmlElement {
+pub const SPEAKER_NOTE: HtmlBlockElement = HtmlBlockElement {
     name: "speaker-note",
     render,
 };
 
-fn render(out: &mut String, b: &Block, _theme: &Theme) -> Result<(), std::fmt::Error> {
+fn render(out: &mut String, b: &Block, _ctx: &HtmlCtx) -> Result<(), std::fmt::Error> {
     write!(
         out,
         "<aside class=\"stem-speaker-note\" hidden style=\"display:none;\">"

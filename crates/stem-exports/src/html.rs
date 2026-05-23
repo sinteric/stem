@@ -3,14 +3,31 @@
 //! Walks a `stem_core::ast::Document` and produces HTML. Per-element
 //! render functions live in the [`elements`] submodule; this file owns
 //! the document walker and the generic fallback for unknown elements.
+//!
+//! ## Property surface
+//!
+//! Mirrors the docx exporter's surface (see `docs/implementing-formats.md`
+//! "docx"): per-paragraph align/before/after/line/size/border-top,
+//! per-image w/h/align/alt/caption, per-table border/stripe/widths/
+//! row-height cascade, per-row + per-cell bg/color/align/valign,
+//! inline `@text` weight/style/decoration/color/bg/size/font, and
+//! top-level `style[id:..., ...]` overrides that emit CSS rules into
+//! `<head>`. Properties this format can't represent (page chrome,
+//! `tabs:`, `float:anchor`) are silently ignored — the baseline
+//! architecture decision codified after the docx migration:
+//! HTML never errors on a docx-only property.
 
+pub mod ctx;
 pub mod elements;
+pub mod style_css;
 
 use std::fmt::Write;
 
 use stem_core::ast::*;
 use stem_core::theme::Theme;
 use stem_core::Exporter;
+
+use ctx::HtmlCtx;
 
 #[derive(Default)]
 pub struct HtmlExporter {
@@ -40,6 +57,7 @@ impl Exporter for HtmlExporter {
         // cells, same-address cells merge, col/row/format cascade. The
         // exporter then walks a normalized tree.
         let cooked = stem_parser::cook_document(doc);
+        let ctx = HtmlCtx::new(&cooked, theme);
 
         let mut out = String::new();
         if self.full_document {
@@ -54,13 +72,23 @@ impl Exporter for HtmlExporter {
             if let Some(t) = cooked.metadata.get_str("title") {
                 writeln!(out, "<title>{}</title>", html_text(t))?;
             }
-            writeln!(out, "<style>{}</style>", base_css(theme))?;
+            let mut css = base_css(theme);
+            css.push_str(&style_css::document_style_css(&ctx.style_overrides));
+            writeln!(out, "<style>{}</style>", css)?;
             writeln!(out, "</head>")?;
             writeln!(out, "<body>")?;
+        } else {
+            // Fragment mode still emits the per-document override CSS
+            // — without it, `style[]` blocks would silently no-op
+            // when the caller asks for a fragment.
+            let css = style_css::document_style_css(&ctx.style_overrides);
+            if !css.is_empty() {
+                writeln!(out, "<style>{}</style>", css)?;
+            }
         }
         writeln!(out, "<div class=\"stem-doc\">")?;
         for block in &cooked.blocks {
-            render_block(&mut out, block, theme)?;
+            render_block(&mut out, block, &ctx)?;
         }
         writeln!(out, "</div>")?;
         if self.full_document {
@@ -71,14 +99,36 @@ impl Exporter for HtmlExporter {
     }
 }
 
-pub(crate) fn render_block(out: &mut String, b: &Block, theme: &Theme) -> Result<(), std::fmt::Error> {
-    // Per-element dispatch: each block element owns its own render fn
-    // in `elements::<name>`. Elements not in the table fall through to
-    // the generic block wrapper.
-    if let Some(el) = elements::lookup_block(&b.name) {
-        return (el.render)(out, b, theme);
+pub(crate) fn render_block(
+    out: &mut String,
+    b: &Block,
+    ctx: &HtmlCtx,
+) -> Result<(), std::fmt::Error> {
+    // Context-dependent elements are intercepted here so the
+    // per-element fn pointer signature (which only carries `&Theme`)
+    // can stay simple for everything else.
+    match b.name.as_str() {
+        "h1" => return elements::heading::render_with_ctx(out, b, ctx, 1),
+        "h2" => return elements::heading::render_with_ctx(out, b, ctx, 2),
+        "h3" => return elements::heading::render_with_ctx(out, b, ctx, 3),
+        "h4" => return elements::heading::render_with_ctx(out, b, ctx, 4),
+        "h5" => return elements::heading::render_with_ctx(out, b, ctx, 5),
+        "h6" => return elements::heading::render_with_ctx(out, b, ctx, 6),
+        "image" => return elements::image::render_with_ctx(out, b, ctx),
+        "table" => return elements::table::render_with_ctx(out, b, ctx),
+        "section" => return elements::section::render_with_ctx(out, b, ctx),
+        // Page chrome + style overrides are consumed by the prepass
+        // and emit nothing into the body. The docx side treats these
+        // as separate parts; HTML has no equivalent, so they silently
+        // no-op rather than spilling a `<div data-stem="header">`
+        // through the fallback path.
+        "style" | "header" | "footer" => return Ok(()),
+        _ => {}
     }
-    render_fallback_block(out, b, theme)
+    if let Some(el) = elements::lookup_block(&b.name) {
+        return (el.render)(out, b, ctx);
+    }
+    render_fallback_block(out, b, ctx)
 }
 
 
@@ -125,13 +175,13 @@ pub(crate) fn format_col_letter(mut n: u32) -> String {
 fn render_fallback_block(
     out: &mut String,
     b: &Block,
-    theme: &Theme,
+    ctx: &HtmlCtx,
 ) -> Result<(), std::fmt::Error> {
     writeln!(out, "<div data-stem=\"{}\">", html_attr(&b.name))?;
     match &b.body {
         Body::None => {}
-        Body::Text(_) => render_text_body_inline(out, b, theme)?,
-        Body::Children(_) => render_children_of(out, b, theme)?,
+        Body::Text(_) => render_text_body_inline(out, b, ctx.theme)?,
+        Body::Children(_) => render_children_of(out, b, ctx)?,
     }
     writeln!(out, "</div>")?;
     Ok(())
@@ -144,11 +194,11 @@ fn render_fallback_block(
 pub(crate) fn render_children_of(
     out: &mut String,
     b: &Block,
-    theme: &Theme,
+    ctx: &HtmlCtx,
 ) -> Result<(), std::fmt::Error> {
     if let Body::Children(kids) = &b.body {
         for k in kids {
-            render_block(out, k, theme)?;
+            render_block(out, k, ctx)?;
         }
     }
     Ok(())
@@ -233,11 +283,11 @@ fn base_css(theme: &Theme) -> String {
     format!(
         "body{{font-family:{body};color:{text};background:{bg};max-width:42rem;margin:2rem auto;padding:0 1rem;line-height:1.55;}}\
          h1,h2,h3,h4,h5,h6{{font-family:{heading};}}\
-         table{{width:100%;}}\
+         table{{width:100%;border-collapse:collapse;}}\
          th,td{{border-color:{rule};}}\
          code{{font-family:{mono};background:#f6f8fa;padding:0 0.25em;border-radius:3px;}}\
-         figure{{margin:1rem 0;}}\
-         figcaption{{font-size:0.9em;color:#666;text-align:center;}}",
+         figure{{margin:1rem 0;text-align:center;}}\
+         figcaption{{font-size:0.9em;color:#666;}}",
         body = theme.fonts.body,
         heading = theme.fonts.heading,
         mono = theme.fonts.mono,

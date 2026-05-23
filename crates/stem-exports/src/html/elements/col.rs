@@ -4,20 +4,20 @@
 //! and never reaches a renderer.
 
 use stem_core::ast::Block;
-use stem_core::theme::Theme;
 
+use super::super::ctx::HtmlCtx;
 use super::super::render_children_of;
-use super::HtmlElement;
+use super::HtmlBlockElement;
 use std::fmt::Write;
 
-pub const COL: HtmlElement = HtmlElement {
+pub const COL: HtmlBlockElement = HtmlBlockElement {
     name: "col",
     render,
 };
 
-fn render(out: &mut String, b: &Block, theme: &Theme) -> Result<(), std::fmt::Error> {
+fn render(out: &mut String, b: &Block, ctx: &HtmlCtx) -> Result<(), std::fmt::Error> {
     writeln!(out, "<div class=\"stem-col\">")?;
-    render_children_of(out, b, theme)?;
+    render_children_of(out, b, ctx)?;
     writeln!(out, "</div>")?;
     Ok(())
 }

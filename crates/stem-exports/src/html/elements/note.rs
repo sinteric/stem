@@ -1,18 +1,19 @@
 //! `note` — sidebar/callout (info/warning/etc).
 
 use stem_core::ast::Block;
-use stem_core::theme::Theme;
 
+use super::super::ctx::HtmlCtx;
 use super::super::{html_attr, render_text_body_inline};
-use super::HtmlElement;
+use super::HtmlBlockElement;
 use std::fmt::Write;
 
-pub const NOTE: HtmlElement = HtmlElement {
+pub const NOTE: HtmlBlockElement = HtmlBlockElement {
     name: "note",
     render,
 };
 
-fn render(out: &mut String, b: &Block, theme: &Theme) -> Result<(), std::fmt::Error> {
+fn render(out: &mut String, b: &Block, ctx: &HtmlCtx) -> Result<(), std::fmt::Error> {
+    let theme = ctx.theme;
     let bg = theme
         .resolve_color("gray")
         .map(|c| c.to_hex())
