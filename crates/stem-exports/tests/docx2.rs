@@ -248,10 +248,24 @@ fn dump_example_artifacts_when_env_set() {
         return;
     };
     std::fs::create_dir_all(&dir).expect("mkdir");
+    // `examples/` paths reference images via `references/...`
+    // which resolve from the workspace root. The test runs from
+    // `crates/stem-exports/`, so set image_base accordingly.
+    let repo_root = std::path::Path::new("../..");
     for example in ["paper.stem", "paper_boringcrypto.stem", "roadmap.stem"] {
         let path = format!("../../examples/{example}");
         if let Ok(src) = std::fs::read_to_string(&path) {
-            let bytes = export_stem(&src);
+            let r = stem_parser::parse(&src);
+            let errs: Vec<_> = r
+                .diagnostics
+                .iter()
+                .filter(|d| matches!(d.severity, stem_core::Severity::Error))
+                .collect();
+            assert!(errs.is_empty(), "parse errors in {example}: {:?}", errs);
+            let bytes = DocxV2Exporter::new()
+                .with_image_base(repo_root)
+                .export(&r.document, &Theme::default())
+                .expect("export");
             let out_path = format!("{}/{}", dir, example.replace(".stem", ".docx"));
             std::fs::write(&out_path, &bytes).expect("write");
             eprintln!("wrote {out_path} ({} bytes)", bytes.len());
